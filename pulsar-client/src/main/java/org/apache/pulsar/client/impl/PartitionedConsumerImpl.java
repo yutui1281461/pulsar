@@ -288,8 +288,6 @@ public class PartitionedConsumerImpl extends ConsumerBase {
                             closeFuture.complete(null);
                             log.info("[{}] [{}] Closed Partitioned Consumer", topic, subscription);
                             client.cleanupConsumer(this);
-                            // fail all pending-receive futures to notify application
-                            failPendingReceive();
                         } else {
                             setState(State.Failed);
                             closeFuture.completeExceptionally(closeFail.get());
@@ -305,25 +303,6 @@ public class PartitionedConsumerImpl extends ConsumerBase {
         }
 
         return closeFuture;
-    }
-
-    private void failPendingReceive() {
-        lock.readLock().lock();
-        try {
-            if (listenerExecutor != null && !listenerExecutor.isShutdown()) {
-                while (!pendingReceives.isEmpty()) {
-                    CompletableFuture<Message> receiveFuture = pendingReceives.poll();
-                    if (receiveFuture != null) {
-                        receiveFuture.completeExceptionally(
-                                new PulsarClientException.AlreadyClosedException("Consumer is already closed"));
-                    } else {
-                        break;
-                    }
-                }
-            }
-        } finally {
-            lock.readLock().unlock();
-        }
     }
 
     @Override

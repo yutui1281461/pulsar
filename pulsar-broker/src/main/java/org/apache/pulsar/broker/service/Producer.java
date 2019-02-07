@@ -28,15 +28,13 @@ import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 
+import org.apache.bookkeeper.mledger.ManagedLedgerException.ManagedLedgerTerminatedException;
 import org.apache.bookkeeper.mledger.util.Rate;
 import org.apache.pulsar.broker.service.BrokerServiceException.TopicTerminatedException;
 import org.apache.pulsar.broker.service.Topic.PublishCallback;
-import org.apache.pulsar.broker.service.nonpersistent.NonPersistentTopic;
-import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.common.api.Commands;
 import org.apache.pulsar.common.api.proto.PulsarApi.ServerError;
 import org.apache.pulsar.common.naming.DestinationName;
-import org.apache.pulsar.common.policies.data.NonPersistentPublisherStats;
 import org.apache.pulsar.common.policies.data.PublisherStats;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,8 +56,6 @@ public class Producer {
     private final long producerId;
     private final String appId;
     private Rate msgIn;
-    // it records msg-drop rate only for non-persistent topic
-    private final Rate msgDrop;
 
     private volatile long pendingPublishAcks = 0;
     private static final AtomicLongFieldUpdater<Producer> pendingPublishAcksUpdater = AtomicLongFieldUpdater
@@ -71,7 +67,6 @@ public class Producer {
     private final PublisherStats stats;
     private final boolean isRemote;
     private final String remoteCluster;
-    private final boolean isNonPersistentTopic;
 
     public Producer(Topic topic, ServerCnx cnx, long producerId, String producerName, String appId) {
         this.topic = topic;
@@ -81,9 +76,8 @@ public class Producer {
         this.closeFuture = new CompletableFuture<>();
         this.appId = appId;
         this.msgIn = new Rate();
-        this.isNonPersistentTopic = topic instanceof NonPersistentTopic;
-        this.msgDrop = this.isNonPersistentTopic ? new Rate() : null;
-        this.stats = isNonPersistentTopic ? new NonPersistentPublisherStats() : new PublisherStats();
+
+        this.stats = new PublisherStats();
         stats.address = cnx.clientAddress().toString();
         stats.connectedSince = DATE_FORMAT.format(Instant.now());
         stats.clientVersion = cnx.getClientVersion();
@@ -115,7 +109,7 @@ public class Producer {
             cnx.ctx().channel().eventLoop().execute(() -> {
                 cnx.ctx().writeAndFlush(Commands.newSendError(producerId, sequenceId, ServerError.PersistenceError,
                         "Producer is closed"));
-                cnx.completedSendOperation(isNonPersistentTopic);
+                cnx.completedSendOperation();
             });
 
             return;
@@ -125,7 +119,7 @@ public class Producer {
             cnx.ctx().channel().eventLoop().execute(() -> {
                 cnx.ctx().writeAndFlush(
                         Commands.newSendError(producerId, sequenceId, ServerError.ChecksumError, "Checksum failed on the broker"));
-                cnx.completedSendOperation(isNonPersistentTopic);
+                cnx.completedSendOperation();
             });
             return;
         }
@@ -180,12 +174,6 @@ public class Producer {
         }
     }
 
-    public void recordMessageDrop(int batchSize) {
-        if (this.isNonPersistentTopic) {
-            msgDrop.recordEvent(batchSize);
-        }
-    }
-
     private static final class MessagePublishedCallback implements PublishCallback, Runnable {
         private Producer producer;
         private long sequenceId;
@@ -207,7 +195,7 @@ public class Producer {
                 producer.cnx.ctx().channel().eventLoop().execute(() -> {
                     producer.cnx.ctx().writeAndFlush(Commands.newSendError(producer.producerId, sequenceId, serverError,
                             exception.getMessage()));
-                    producer.cnx.completedSendOperation(producer.isNonPersistentTopic);
+                    producer.cnx.completedSendOperation();
                     producer.publishOperationCompleted();
                 });
             } else {
@@ -237,7 +225,7 @@ public class Producer {
             producer.cnx.ctx().writeAndFlush(
                     Commands.newSendReceipt(producer.producerId, sequenceId, ledgerId, entryId),
                     producer.cnx.ctx().voidPromise());
-            producer.cnx.completedSendOperation(producer.isNonPersistentTopic);
+            producer.cnx.completedSendOperation();
             producer.publishOperationCompleted();
             recycle();
         }
@@ -351,10 +339,6 @@ public class Producer {
         stats.msgRateIn = msgIn.getRate();
         stats.msgThroughputIn = msgIn.getValueRate();
         stats.averageMsgSize = msgIn.getAverageValue();
-        if (this.isNonPersistentTopic) {
-            msgDrop.calculateRate();
-            ((NonPersistentPublisherStats) stats).msgDropRate = msgDrop.getRate();
-        }
     }
 
     public boolean isRemote() {
@@ -367,10 +351,6 @@ public class Producer {
 
     public PublisherStats getStats() {
         return stats;
-    }
-
-    public boolean isNonPersistentTopic() {
-        return isNonPersistentTopic;
     }
 
     @VisibleForTesting
@@ -395,5 +375,4 @@ public class Producer {
     }
 
     private static final Logger log = LoggerFactory.getLogger(Producer.class);
-    
 }

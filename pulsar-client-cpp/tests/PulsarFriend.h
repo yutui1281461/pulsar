@@ -48,19 +48,5 @@ class PulsarFriend {
         ConsumerImpl* consumerImpl = static_cast<ConsumerImpl*>(consumer.impl_.get());
         return boost::static_pointer_cast<ConsumerStatsImpl>(consumerImpl->consumerStatsBasePtr_);
     }
-
-    static ProducerImpl& getProducerImpl(Producer producer) {
-        ProducerImpl* producerImpl = static_cast<ProducerImpl*>(producer.impl_.get());
-        return *producerImpl;
-    }
-
-    static ConsumerImpl& getConsumerImpl(Consumer consumer) {
-        ConsumerImpl* consumerImpl = static_cast<ConsumerImpl*>(consumer.impl_.get());
-        return *consumerImpl;
-    }
-
-    static ClientConnectionWeakPtr getClientConnection(HandlerBase&  handler) {
-        return handler.connection_;
-    }
 };
 }

@@ -61,7 +61,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.bokkeeper.stats.datasketches.DataSketchesMetricsProvider;
-import org.apache.bookkeeper.bookie.InterleavedLedgerStorage;
 import org.apache.bookkeeper.bookie.storage.ldb.DbLedgerStorage;
 import org.apache.bookkeeper.conf.ServerConfiguration;
 import org.apache.bookkeeper.proto.BookieServer;
@@ -222,25 +221,8 @@ public class LocalBookkeeperEnsemble {
         LOG.debug("Local ZK/BK starting ...");
         ServerConfiguration conf = new ServerConfiguration();
         conf.setLedgerManagerFactoryClassName("org.apache.bookkeeper.meta.HierarchicalLedgerManagerFactory");
-        // Use minimal configuration requiring less memory for unit tests
         conf.setLedgerStorageClass(DbLedgerStorage.class.getName());
-        conf.setProperty("dbStorage_writeCacheMaxSizeMb", 2);
-        conf.setProperty("dbStorage_readAheadCacheMaxSizeMb", 1);
-        conf.setProperty("dbStorage_rocksDB_writeBufferSizeMB", 1);
-        conf.setProperty("dbStorage_rocksDB_blockCacheSize", 1024 * 1024);
-        conf.setFlushInterval(60000);
-        conf.setProperty("journalMaxGroupWaitMSec", 0L);
-
-        runZookeeper(1000);
-        initializeZookeper();
-        runBookies(conf);
-    }
-
-    public void startStandalone() throws Exception {
-        LOG.debug("Local ZK/BK starting ...");
-        ServerConfiguration conf = new ServerConfiguration();
-        conf.setLedgerManagerFactoryClassName("org.apache.bookkeeper.meta.HierarchicalLedgerManagerFactory");
-        conf.setLedgerStorageClass(DbLedgerStorage.class.getName());
+        conf.setProperty("dbStorage_rocksDBEnabled", true);
         conf.setProperty("dbStorage_writeCacheMaxSizeMb", 256);
         conf.setProperty("dbStorage_readAheadCacheMaxSizeMb", 64);
         conf.setFlushInterval(60000);

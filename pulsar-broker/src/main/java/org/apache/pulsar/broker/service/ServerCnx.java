@@ -62,7 +62,6 @@ import org.apache.pulsar.common.naming.DestinationName;
 import org.apache.pulsar.common.policies.data.BacklogQuota;
 import org.apache.pulsar.common.policies.data.ConsumerStats;
 import org.apache.pulsar.common.util.collections.ConcurrentLongHashMap;
-import org.apache.bookkeeper.mledger.util.SafeRun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,8 +86,6 @@ public class ServerCnx extends PulsarHandler {
     private int pendingSendRequest = 0;
     private final String replicatorPrefix;
     private String clientVersion = null;
-    private int nonPersistentPendingMessages = 0;
-    private final int MaxNonPersistentPendingMessages;
 
     enum State {
         Start, Connected
@@ -103,8 +100,6 @@ public class ServerCnx extends PulsarHandler {
         this.producers = new ConcurrentLongHashMap<>(8, 1);
         this.consumers = new ConcurrentLongHashMap<>(8, 1);
         this.replicatorPrefix = service.pulsar().getConfiguration().getReplicatorPrefix();
-        this.MaxNonPersistentPendingMessages = service.pulsar().getConfiguration()
-                .getMaxConcurrentNonPersistentMessagePerConnection();
     }
 
     @Override
@@ -576,17 +571,6 @@ public class ServerCnx extends PulsarHandler {
             printSendCommandDebug(send, headersAndPayload);
         }
 
-        // avoid processing non-persist message if reached max concurrent-message limit
-        if (producer.isNonPersistentTopic() && nonPersistentPendingMessages++ > MaxNonPersistentPendingMessages) {
-            final long producerId = send.getProducerId();
-            final long sequenceId = send.getSequenceId();
-            service.getTopicOrderedExecutor().submitOrdered(producer.getTopic(), SafeRun.safeRun(() -> {
-                ctx.writeAndFlush(Commands.newSendReceipt(producerId, sequenceId, -1, -1), ctx.voidPromise());
-            }));
-            producer.recordMessageDrop(send.getNumMessages());
-            return;
-        }
-
         startSendOperation();
 
         // Persist the message
@@ -829,13 +813,10 @@ public class ServerCnx extends PulsarHandler {
         }
     }
 
-    public void completedSendOperation(boolean isNonPersistentTopic) {
+    public void completedSendOperation() {
         if (--pendingSendRequest == ResumeReadsThreshold) {
             // Resume reading from socket
             ctx.channel().config().setAutoRead(true);
-        }
-        if (isNonPersistentTopic) {
-            nonPersistentPendingMessages--;
         }
     }
 

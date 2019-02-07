@@ -19,7 +19,6 @@
 package org.apache.bookkeeper.test;
 
 import java.net.ServerSocket;
-import java.util.Random;
 import java.io.IOException;
 
 /**
@@ -50,9 +49,6 @@ public class PortManager {
     }
 
     private static int getBasePort() {
-        int basePort = Integer.valueOf(System.getProperty("test.basePort", "15000"));
-        // Randomize base port to avoid race condition on 2 processes probing the
-        // same port
-        return basePort + new Random(System.nanoTime()).nextInt(30000);
+        return Integer.valueOf(System.getProperty("test.basePort", "15000"));
     }
 }

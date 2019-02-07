@@ -109,7 +109,6 @@ flexible messaging model and an intuitive client API.</description>
     <athenz.version>1.7.17</athenz.version>
     <prometheus.version>0.0.23</prometheus.version>
     <aspectj.version>1.8.9</aspectj.version>
-    <rocksdb.version>5.5.5</rocksdb.version>
   </properties>
 
   <dependencyManagement>
@@ -130,13 +129,7 @@ flexible messaging model and an intuitive client API.</description>
       <dependency>
         <groupId>org.testng</groupId>
         <artifactId>testng</artifactId>
-        <version>6.11</version>
-      </dependency>
-
-      <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <version>4.12</version>
+        <version>6.8.5</version>
       </dependency>
 
       <dependency>
@@ -212,12 +205,6 @@ flexible messaging model and an intuitive client API.</description>
         <groupId>org.apache.bookkeeper.stats</groupId>
         <artifactId>prometheus-metrics-provider</artifactId>
         <version>${bookkeeper.version}</version>
-      </dependency>
-
-      <dependency>
-        <groupId>org.rocksdb</groupId>
-        <artifactId>rocksdbjni</artifactId>
-        <version>${rocksdb.version}</version>
       </dependency>
 
       <dependency>
@@ -499,7 +486,7 @@ flexible messaging model and an intuitive client API.</description>
         <artifactId>aspectjweaver</artifactId>
         <version>${aspectj.version}</version>
       </dependency>
-
+      
       <dependency>
         <groupId>com.ea.agentloader</groupId>
         <artifactId>ea-agent-loader</artifactId>
@@ -521,12 +508,6 @@ flexible messaging model and an intuitive client API.</description>
       <artifactId>testng</artifactId>
       <scope>test</scope>
     </dependency>
-
-    <dependency>
-        <groupId>junit</groupId>
-        <artifactId>junit</artifactId>
-        <scope>test</scope>
-      </dependency>
   </dependencies>
 
   <build>
@@ -563,18 +544,10 @@ flexible messaging model and an intuitive client API.</description>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
-        <version>2.20</version>
+        <version>2.19.1</version>
         <configuration>
-          <!-- <argLine> -Xmx2G -XX:MaxDirectMemorySize=8G
-            -Dio.netty.leakDetectionLevel=advanced</argLine> -->
-          <redirectTestOutputToFile>true</redirectTestOutputToFile>
-          <reuseForks>true</reuseForks>
-          <forkCount>1C</forkCount>
-          <shutdown>kill</shutdown>
-          <!--
-          <forkedProcessExitTimeoutInSeconds>30</forkedProcessExitTimeoutInSeconds>
-          <forkedProcessTimeoutInSeconds>500</forkedProcessTimeoutInSeconds>
-          -->
+          <argLine> -Xmx2G -XX:MaxDirectMemorySize=8G
+            -Dio.netty.leakDetectionLevel=advanced</argLine>
         </configuration>
       </plugin>
 
@@ -630,6 +603,13 @@ flexible messaging model and an intuitive client API.</description>
             <cc>JAVADOC_STYLE</cc>
           </mapping>
         </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -659,13 +639,6 @@ flexible messaging model and an intuitive client API.</description>
             <exclude>**/test-output/**</exclude>
             <exclude>**/*.hgrm</exclude>
             <exclude>**/*.test</exclude>
-
-            <!-- Other license files -->
-            <exclude>licenses/LICENSE-*.txt</exclude>
-            <exclude>src/assemble/README.bin.txt</exclude>
-
-            <!-- Exclude site since it's not released -->
-            <exclude>**/site/**</exclude>
 
             <exclude>**/*.patch</exclude>
             <exclude>**/*.md</exclude>

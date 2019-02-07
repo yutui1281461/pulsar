@@ -49,7 +49,7 @@ import org.apache.pulsar.common.api.proto.PulsarApi.CommandAck.AckType;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandSubscribe.SubType;
 import org.apache.pulsar.common.naming.DestinationName;
 import org.apache.pulsar.common.policies.data.ConsumerStats;
-import org.apache.pulsar.common.policies.data.SubscriptionStats;
+import org.apache.pulsar.common.policies.data.PersistentSubscriptionStats;
 import org.apache.pulsar.utils.CopyOnWriteArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,11 +80,6 @@ public class PersistentSubscription implements Subscription {
         this.subName = subscriptionName;
         this.expiryMonitor = new PersistentMessageExpiryMonitor(topicName, subscriptionName, cursor);
         IS_FENCED_UPDATER.set(this, FALSE);
-    }
-
-    @Override
-    public String getName() {
-        return this.subName;
     }
 
     @Override
@@ -595,8 +590,8 @@ public class PersistentSubscription implements Subscription {
         return expiryMonitor.getMessageExpiryRate();
     }
 
-    public SubscriptionStats getStats() {
-        SubscriptionStats subStats = new SubscriptionStats();
+    public PersistentSubscriptionStats getStats() {
+        PersistentSubscriptionStats subStats = new PersistentSubscriptionStats();
 
         Dispatcher dispatcher = this.dispatcher;
         if (dispatcher != null) {

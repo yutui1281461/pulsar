@@ -20,7 +20,6 @@ package org.apache.pulsar.broker.stats.prometheus;
 
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerMBeanImpl;
 import org.apache.pulsar.broker.PulsarService;
-import org.apache.pulsar.broker.service.Topic;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
 import org.apache.pulsar.common.policies.data.ReplicatorStats;
 import org.apache.pulsar.utils.SimpleTextOutputStream;
@@ -53,20 +52,16 @@ public class NamespaceStatsAggregator {
         });
     }
 
-    private static void updateNamespaceStats(AggregatedNamespaceStats stats, Topic topic) {
-        
-        if(topic instanceof PersistentTopic) {
-         // Managed Ledger stats
-            ManagedLedgerMBeanImpl mlStats = (ManagedLedgerMBeanImpl) ((PersistentTopic)topic).getManagedLedger().getStats();
+    private static void updateNamespaceStats(AggregatedNamespaceStats stats, PersistentTopic topic) {
+        // Managed Ledger stats
+        ManagedLedgerMBeanImpl mlStats = (ManagedLedgerMBeanImpl) topic.getManagedLedger().getStats();
 
-            stats.storageSize += mlStats.getStoredMessagesSize();
-            stats.storageWriteLatencyBuckets.addAll(mlStats.getInternalAddEntryLatencyBuckets());
-            stats.entrySizeBuckets.addAll(mlStats.getInternalEntrySizeBuckets());
+        stats.storageSize += mlStats.getStoredMessagesSize();
+        stats.storageWriteLatencyBuckets.addAll(mlStats.getInternalAddEntryLatencyBuckets());
+        stats.entrySizeBuckets.addAll(mlStats.getInternalEntrySizeBuckets());
 
-            stats.storageWriteRate = mlStats.getAddEntryMessagesRate();
-            stats.storageReadRate = mlStats.getReadEntriesRate();    
-        }
-        
+        stats.storageWriteRate = mlStats.getAddEntryMessagesRate();
+        stats.storageReadRate = mlStats.getReadEntriesRate();
         stats.topicsCount++;
 
         topic.getProducers().forEach(producer -> {

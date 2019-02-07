@@ -37,7 +37,7 @@ setup: ruby_setup
 
 travis_setup: ruby_setup python_setup
 
-travis_build: javadoc
+travis_build: javadoc cpp_doc_gen
 	scripts/build-all-versions.sh
 
 travis_publish:
@@ -52,7 +52,7 @@ serve: clean_local
 		--config _config.yml,_config.local.yml
 
 javadoc:
-	rm -rf api/{admin,client}
+	rm -rf api
 	scripts/javadoc-gen.sh
 
 python_doc_gen:

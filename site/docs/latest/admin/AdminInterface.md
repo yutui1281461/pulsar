@@ -34,7 +34,7 @@ In this document, examples from each of the three available interfaces will be s
 
 {% include explanations/broker-admin.md %}
 
-## Managing Properties
+### Properties
 
 A property identifies an application domain. For e.g. finance, mail,
 sports etc are examples of a property. Tool allows to do CRUD operation
@@ -175,97 +175,15 @@ N/A
 admin.properties().deleteProperty(property);
 ```
 
+### Clusters
+
+{% include explanations/cluster-admin.md %}
+
 ## Managing namespaces
 
 {% include explanations/namespace-admin.md %}
 
-### Resource-Quotas
-
-#### set namespace resource quota
-
-It sets customize quota information for a given namespace bundle.  
-
-###### CLI
-
-```
-$ pulsar-admin resource-quotas set --bandwidthIn 10 --bandwidthOut 10 --bundle 0x00000000_0xffffffff --memory 10 --msgRateIn 10 --msgRateOut 10 --namespace test-property/cl1/ns1
-```
-
-```
-N/A
-```
-
-###### REST
-
-```
-POST /admin/resource-quotas/{property}/{cluster}/{namespace}/{bundle}
-```
-
-###### Java
-
-```java
-admin.resourceQuotas().setNamespaceBundleResourceQuota(namespace, bundle, quota)
-```
-
-#### get namespace resource quota
-
-It shows configured resource quota information.  
-
-###### CLI
-
-```
-$ pulsar-admin resource-quotas get  --bundle 0x00000000_0xffffffff --namespace test-property/cl1/my-topic
-```
-
-```json
-{
-    "msgRateIn": 80.40352101165782,
-    "msgRateOut": 132.58187392933146,
-    "bandwidthIn": 144273.8819600397,
-    "bandwidthOut": 234497.9190227951,
-    "memory": 199.91739142481595,
-    "dynamic": true
-}          
-```
-
-###### REST
-```
-GET /admin/resource-quotas/{property}/{cluster}/{namespace}/{bundle}
-```
-
-###### Java
-
-```java
-admin.resourceQuotas().getNamespaceBundleResourceQuota(namespace, bundle)
-```
-
-#### reset namespace resource quota
-
-It again reverts back the customized resource quota and sets back default resource_quota.  
-
-###### CLI
-
-```
-$ pulsar-admin resource-quotas reset-namespace-bundle-quota --bundle 0x00000000_0xffffffff --namespace test-property/cl1/my-topic
-```
-
-```
-N/A
-```
-
-###### REST
-
-```
-DELETE /admin/resource-quotas/{property}/{cluster}/{namespace}/{bundle}
-```
-
-###### Java
-
-```java
-admin.resourceQuotas().resetNamespaceBundleResourceQuota(namespace, bundle)
-```
-
-## Managing persistent topics
+## Managing peristent topics
 
 Persistent helps to access topic which is a logical endpoint for
 publishing and consuming messages. Producers publish messages to the
@@ -276,7 +194,334 @@ In below instructions and commands - persistent topic format is:
 
 {% include topic.html p="property" c="cluster" n="namespace" t="topic" %}
 
-{% include explanations/persistent-topic-admin.md %}
+{% include explanations/partitioned-topics.md %}
+
+## Permissions
+
+#### Grant permission
+
+It grants permissions on a client role to perform specific actions on a given topic.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent grant-permission --actions produce,consume --role application1 persistent://test-property/cl1/ns1/tp1
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+POST /admin/persistent/{property}/{cluster}/{namespace}/{destination}/permissions/{role}
+```
+
+###### Java
+
+```java
+admin.persistentTopics().grantPermission(destination, role, getAuthActions(actions))
+```
+
+#### Get permission
+
+It shows a list of client role permissions on a given topic.  
+
+###### CLI
+
+```
+$ pulsar-admin permissions persistent://test-property/cl1/ns1/tp1
+```
+
+```json
+{
+    "application1": [
+        "consume",
+        "produce"
+    ]
+}
+```
+
+###### REST
+
+```
+GET /admin/persistent/{property}/{cluster}/{namespace}/{destination}/permissions
+```
+
+###### Java
+
+```java
+admin.persistentTopics().getPermissions(destination)
+```
+
+#### Revoke permission
+
+It revokes a permission which was granted on a client role.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent revoke-permission --role application1 persistent://test-property/cl1/ns1/tp1
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+DELETE /admin/persistent/{property}/{cluster}/{namespace}/{destination}/permissions/{role}
+```
+
+###### Java
+
+```java
+admin.persistentTopics().revokePermissions(destination, role)
+```
+
+#### Peek messages
+
+It peeks N messages for a specific subscription of a given topic.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent peek-messages --count 10 --subscription my-subscription persistent://test-property/cl1/ns1/my-topic
+```
+
+```          
+Message ID: 315674752:0  
+Properties:  {  "X-Pulsar-publish-time" : "2015-07-13 17:40:28.451"  }
+msg-payload
+```
+
+###### REST
+
+```
+GET /admin/persistent/{property}/{cluster}/{namespace}/{destination}/subscription/{subName}/position/{messagePosition}
+```
+
+
+###### Java
+
+```java
+admin.persistentTopics().peekMessages(persistentTopic, subName, numMessages)
+```
+
+
+#### Skip messages
+
+It skips N messages for a specific subscription of a given topic.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent skip --count 10 --subscription my-subscription persistent://test-property/cl1/ns1/my-topic
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+POST /admin/persistent/{property}/{cluster}/{namespace}/{destination}/subscription/{subName}/skip/{numMessages}
+```
+
+###### Java
+
+```java
+admin.persistentTopics().skipMessages(persistentTopic, subName, numMessages)
+```
+
+#### Skip all messages
+
+It skips all old messages for a specific subscription of a given topic.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent skip-all --subscription my-subscription persistent://test-property/cl1/ns1/my-topic
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+POST /admin/persistent/{property}/{cluster}/{namespace}/{destination}/subscription/{subName}/skip_all
+```
+
+###### Java
+
+```java
+admin.persistentTopics().skipAllMessages(persistentTopic, subName)
+```
+
+#### Expire messages
+
+It expires messages which are older than given expiry time (in seconds) for a specific subscription of a given topic.
+
+###### CLI
+
+```
+$ pulsar-admin persistent expire-messages --subscription my-subscription --expireTime 120 persistent://test-property/cl1/ns1/my-topic
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+POST /admin/persistent/{property}/{cluster}/{namespace}/{destination}/subscription/{subName}/expireMessages/{expireTimeInSeconds}
+```
+
+###### Java
+
+```java
+admin.persistentTopics().expireMessages(persistentTopic, subName, expireTimeInSeconds)
+```
+
+#### Expire all messages
+
+It expires messages which are older than given expiry time (in seconds) for all subscriptions of a given topic.
+
+###### CLI
+
+```
+$ pulsar-admin persistent expire-messages-all-subscriptions --expireTime 120 persistent://test-property/cl1/ns1/my-topic
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+POST /admin/persistent/{property}/{cluster}/{namespace}/{destination}/all_subscription/expireMessages/{expireTimeInSeconds}
+```
+
+###### Java
+
+```java
+admin.persistentTopics().expireMessagesForAllSubscriptions(persistentTopic, expireTimeInSeconds)
+```
+
+
+
+#### Reset cursor
+
+It resets a subscription’s cursor position back to the position which was recorded X minutes before. It essentially calculates time and position of cursor at X minutes before and resets it at that position.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent reset-cursor --subscription my-subscription --time 10 persistent://test-property/pstg-gq1/ns1/my-topic
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+POST /admin/persistent/{property}/{cluster}/{namespace}/{destination}/subscription/{subName}/resetcursor/{timestamp}
+```
+
+###### Java
+
+```java
+admin.persistentTopics().resetCursor(persistentTopic, subName, timestamp)
+```
+
+
+#### Lookup of topic
+
+
+It locates broker url which is serving the given topic.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent lookup persistent://test-property/pstg-gq1/ns1/my-topic
+```
+
+```
+"pulsar://broker1.org.com:4480"
+```
+
+###### REST
+```
+GET http://<broker-url>:<port>/lookup/v2/destination/persistent/{property}/{cluster}/{namespace}/{dest}
+(\* this api serves by “lookup” resource and not “persistent”)
+```
+
+###### Java
+
+```java
+admin.lookups().lookupDestination(destination)
+```
+
+#### Get subscriptions
+
+It shows all subscription names for a given topic.  
+
+###### CLI
+
+```
+$ pulsar-admin persistent subscriptions persistent://test-property/pstg-gq1/ns1/my-topic
+```
+
+```
+my-subscription
+```
+
+###### REST
+
+```
+GET /admin/persistent/{property}/{cluster}/{namespace}/{destination}/subscriptions
+```
+
+###### Java
+
+```java
+admin.persistentTopics().getSubscriptions(persistentTopic)
+```
+
+#### unsubscribe
+
+It can also help to unsubscribe a subscription which is no more processing further messages.  
+
+###### CLI
+
+```
+$pulsar-admin persistent unsubscribe --subscription my-subscription persistent://test-property/pstg-gq1/ns1/my-topic
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+DELETE /admin/persistent/{property}/{cluster}/{namespace}/{destination}/subscription/{subName}
+```
+
+###### Java
+
+```java
+admin.persistentTopics().deleteSubscription(persistentTopic, subName)
+```
 
 ### Namespace isolation policy
 
@@ -430,28 +675,93 @@ GET /admin/clusters/{cluster}/namespaceIsolationPolicies
 admin.clusters().getNamespaceIsolationPolicies(clusterName)
 ```
 
-## Managing non-peristent topics
 
-Non-persistent can be used in applications that only want to consume real time published messages and 
-do not need persistent guarantee that can also reduce message-publish latency by removing overhead of 
-persisting messages.
+### Resource-Quotas
 
-{% include explanations/non-persistent-topic-admin.md %}
+#### set namespace resource quota
 
+It sets customize quota information for a given namespace bundle.  
 
-## Managing partitioned topics
+###### CLI
 
-Partitioned topic is actually implemented as N internal topics, where N is the number of partitions.
-When publishing messages to a partitioned topic, each message is routed to one of several brokers.
-The distribution of partitions across brokers is handled automatically by Pulsar.
+```
+$ pulsar-admin resource-quotas set --bandwidthIn 10 --bandwidthOut 10 --bundle 0x00000000_0xffffffff --memory 10 --msgRateIn 10 --msgRateOut 10 --namespace test-property/cl1/ns1
+```
 
-In below instructions and commands - persistent topic format is:
+```
+N/A
+```
 
-{% include topic.html p="property" c="cluster" n="namespace" t="topic" %}
+###### REST
 
-{% include explanations/partitioned-topics.md %}
+```
+POST /admin/resource-quotas/{property}/{cluster}/{namespace}/{bundle}
+```
 
+###### Java
 
-### Partitioned topics
+```java
+admin.resourceQuotas().setNamespaceBundleResourceQuota(namespace, bundle, quota)
+```
+
+#### get namespace resource quota
+
+It shows configured resource quota information.  
+
+###### CLI
+
+```
+$ pulsar-admin resource-quotas get  --bundle 0x00000000_0xffffffff --namespace test-property/cl1/my-topic
+```
+
+```json
+{
+    "msgRateIn": 80.40352101165782,
+    "msgRateOut": 132.58187392933146,
+    "bandwidthIn": 144273.8819600397,
+    "bandwidthOut": 234497.9190227951,
+    "memory": 199.91739142481595,
+    "dynamic": true
+}          
+```
+
+###### REST
+```
+GET /admin/resource-quotas/{property}/{cluster}/{namespace}/{bundle}
+```
+
+###### Java
+
+```java
+admin.resourceQuotas().getNamespaceBundleResourceQuota(namespace, bundle)
+```
+
+#### reset namespace resource quota
+
+It again reverts back the customized resource quota and sets back default resource_quota.  
+
+###### CLI
+
+```
+$ pulsar-admin resource-quotas reset-namespace-bundle-quota --bundle 0x00000000_0xffffffff --namespace test-property/cl1/my-topic
+```
+
+```
+N/A
+```
+
+###### REST
+
+```
+DELETE /admin/resource-quotas/{property}/{cluster}/{namespace}/{bundle}
+```
+
+###### Java
+
+```java
+admin.resourceQuotas().resetNamespaceBundleResourceQuota(namespace, bundle)
+```
+
+## Partitioned topics
 
 {% include explanations/partitioned-topic-admin.md %}

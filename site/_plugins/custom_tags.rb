@@ -34,7 +34,7 @@ module Jekyll
       end
 
       if ['persisted', 'persists'].include? @term
-        @term = 'persistent'
+        @term = 'peristent'
       end
 
       if @term == 'multi-tenant'

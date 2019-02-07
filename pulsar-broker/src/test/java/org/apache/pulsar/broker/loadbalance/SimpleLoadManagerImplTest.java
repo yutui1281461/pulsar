@@ -127,6 +127,10 @@ public class SimpleLoadManagerImplTest {
     private final int SECONDARY_BROKER_PORT = PortManager.nextFreePort();
     private static final Logger log = LoggerFactory.getLogger(SimpleLoadManagerImplTest.class);
 
+    static {
+        System.setProperty("test.basePort", "16100");
+    }
+
     @BeforeMethod
     void setup() throws Exception {
 

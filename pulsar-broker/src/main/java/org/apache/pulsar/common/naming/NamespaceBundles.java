@@ -89,11 +89,7 @@ public class NamespaceBundles {
     public NamespaceBundle findBundle(DestinationName dn) {
         checkArgument(this.nsname.equals(dn.getNamespaceObject()));
         long hashCode = factory.getLongHashCode(dn.toString());
-        NamespaceBundle bundle = getBundle(hashCode);
-        if (dn.getDomain().equals(DestinationDomain.non_persistent)) {
-            bundle.setHasNonPersistentTopic(true);
-        }
-        return bundle;
+        return getBundle(hashCode);
     }
 
     public List<NamespaceBundle> getBundles() {

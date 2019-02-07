@@ -18,35 +18,33 @@
  */
 package org.apache.pulsar.broker.service;
 
-import java.nio.charset.StandardCharsets;
-
-import org.apache.bookkeeper.test.PortManager;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.zookeeper.LocalBookkeeperEnsemble;
 import org.apache.zookeeper.data.Stat;
-import org.testng.Assert;
-import org.testng.annotations.AfterTest;
-import org.testng.annotations.BeforeTest;
-import org.testng.annotations.Test;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.nio.charset.StandardCharsets;
 
 public class AdvertisedAddressTest {
 
     LocalBookkeeperEnsemble bkEnsemble;
     PulsarService pulsar;
 
-    private final int ZOOKEEPER_PORT = PortManager.nextFreePort();
-    private final int BROKER_WEBSERVICE_PORT = PortManager.nextFreePort();
-    private final int BROKER_SERVICE_PORT = PortManager.nextFreePort();
+    private final int ZOOKEEPER_PORT = 12759;
+    private final int BROKER_WEBSERVICE_PORT = 15782;
+    private final int BROKER_SERVICE_PORT = 16650;
 
     private final String advertisedAddress = "pulsar-usc.example.com";
 
-    @BeforeTest
+    @Before
     public void setup() throws Exception {
-        bkEnsemble = new LocalBookkeeperEnsemble(3, ZOOKEEPER_PORT, PortManager.nextFreePort());
+        bkEnsemble = new LocalBookkeeperEnsemble(3, ZOOKEEPER_PORT, 5001);
         bkEnsemble.start();
         ServiceConfiguration config = new ServiceConfiguration();
         config.setZookeeperServers("127.0.0.1" + ":" + ZOOKEEPER_PORT);
@@ -60,7 +58,7 @@ public class AdvertisedAddressTest {
         pulsar.start();
     }
 
-    @AfterTest
+    @After
     public void shutdown() throws Exception {
         pulsar.close();
         bkEnsemble.stop();

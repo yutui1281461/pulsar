@@ -24,19 +24,19 @@
   </button>
 
  {% if page.url != "/" %}
-  <a class="navbar-brand" href="/">
-    <img class="main-logo" src="/img/pulsar-logo.png" alt="Pulsar logo">
+  <a class="navbar-brand" href="{{ site.baseurl }}">
+    <img class="main-logo" src="{{ site.baseurl }}img/pulsar-logo.png" alt="Pulsar logo">
   </a>
   {% endif %}
 
   <div class="collapse navbar-collapse justify-content-end" id="navbarNavDropdown">
     <ul class="navbar-nav">
       <li class="nav-item">
-        <a class="nav-link" href="/docs/latest/getting-started/LocalCluster">Documentation</a>
+        <a class="nav-link" href="{{ site.baseurl }}docs/latest">Documentation</a>
       </li>
 
       <li class="nav-item">
-          <a class="nav-link" href="/download">Download</a>
+          <a class="nav-link" href="{{ site.baseurl }}download">Download</a>
       </li>
 
       <li class="nav-item dropdown">
@@ -44,13 +44,13 @@
           Client libraries
         </a>
         <div class="dropdown-menu" aria-labelledby="clientLibsDropdown">
-          <a class="dropdown-item" href="/docs/latest/clients/Java">
+          <a class="dropdown-item" href="{{ site.baseurl }}docs/latest/applications/JavaClient">
             Java
           </a>
-          <a class="dropdown-item" href="/docs/latest/clients/Python">
+          <a class="dropdown-item" href="{{ site.baseurl }}docs/latest/applications/PythonClient">
             Python
           </a>
-          <a class="dropdown-item" href="/docs/latest/clients/Cpp">
+          <a class="dropdown-item" href="{{ site.baseurl }}docs/latest/applications/CppClient">
             C++
           </a>
           <div class="dropdown-divider"></div>
@@ -75,7 +75,7 @@
         </a>
         <div class="dropdown-menu" aria-labelledby="versionsDropdown">
           <h3 class="dropdown-header">Get in touch</h3>
-          <a class="dropdown-item" href="{{ site.baseurl }}contact">Contact</a>
+          <a class="dropdown-item" href="{{ site.baseurl }}mailing-lists">Mailing Lists</a>
           <a class="dropdown-item" href="https://twitter.com/Apache_Pulsar">Twitter</a>
           <a class="dropdown-item" href="https://github.com/apache/incubator-pulsar/wiki">Wiki</a>
           <a class="dropdown-item" href="https://github.com/apache/incubator-pulsar/issues">Issue tracking</a>
@@ -95,6 +95,6 @@
     </ul>
   </div>
   <a href="http://www.apache.org/">
-    <img class="asf-logo" title="Apache Software Foundation" src="/img/feather.png" />
+    <img class="asf-logo" title="Apache Software Foundation" src="{{site.baseurl}}img/feather.png" />
   </a>
 </nav>
