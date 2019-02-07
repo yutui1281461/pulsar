@@ -18,7 +18,7 @@ Pulsar's key features include:
 
 ## Producers, consumers, topics, and subscriptions
 
-Pulsar is built on the [publish-subscribe](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern) pattern, aka {% popover pub-sub %}. In this pattern, [producers](#producers) publish messages to [topics](#topics). [Consumers](#consumers) can then [subscribe](#subscription-modes) to those topics and process incoming messages.
+Pulsar is built on the [publish-subscribe](https://en.wikipedia.org/wiki/Publish%E2%80%93subscribe_pattern) pattern, aka {% popover pub-sub %}. In this pattern, [producers](#producers) publish messages to [topics](#topics). [Consumers](#consumers) can then [subscribe](#subscription-modes) to those topics, process incoming messages, and send an {% popover acknowledgement %} when processing is complete.
 
 Once a {% popover subscription %} has been created, all messages will be [retained](#persistent-storage) by Pulsar, even if the consumer gets disconnected. Retained messages will be discarded only when a consumer {% popover acknowledges %} that they've been successfully processed.
 
@@ -89,7 +89,7 @@ As in other pub-sub systems, topics in Pulsar are named channels for transmittin
 
 A subscription is a named configuration rule that determines how messages are delivered to {% popover consumers %}. There are three available subscription modes in Pulsar: [exclusive](#exclusive), [shared](#shared), and [failover](#failover). These modes are illustrated in the figure below.
 
-![Subscription Modes]({{ site.baseurl }}img/pulsar_subscriptions.jpg)
+![Subscription Modes](/img/pulsar_subscriptions.jpg)
 
 #### Exclusive
 
@@ -131,7 +131,7 @@ In a Pulsar cluster:
 
 The diagram below provides an illustration of a Pulsar cluster:
 
-![Architecture Diagram]({{ site.baseurl }}img/pulsar_system_architecture.png)
+![Architecture Diagram](/img/pulsar_system_architecture.png)
 
 At the broader {% popover instance %} level, an instance-wide ZooKeeper cluster called {% popover global ZooKeeper %} handles coordination tasks involving multiple clusters, for example [geo-replication](#replication).
 
@@ -160,6 +160,14 @@ Clusters can replicate amongst themselves using [geo-replication](#geo-replicati
 
 {% include admonition.html type="info" content="For a guide to managing Pulsar clusters, see the [Clusters and brokers](../../admin/ClustersBrokers#managing-clusters) guide." %}
 
+### Global cluster
+
+In any Pulsar {% popover instance %}, there is an instance-wide cluster called `global` that you can use to mange non-cluster-specific namespaces and topics. The `global` cluster is created for you automatically when you [initialize metadata](../../admin/ClustersBrokers#initialize-cluster-metadata) for the first cluster in your instance.
+
+Global topic names have this basic structure (note the `global` cluster):
+
+{% include topic.html p="my-property" c="global" n="my-namespace" t="my-topic" %}
+
 ## Metadata store
 
 Pulsar uses [Apache Zookeeper](https://zookeeper.apache.org/) for metadata storage, cluster configuration, and coordination. In a Pulsar instance:
@@ -167,9 +175,11 @@ Pulsar uses [Apache Zookeeper](https://zookeeper.apache.org/) for metadata stora
 * A {% popover global ZooKeeper %} quorum stores configuration for {% popover properties %}, {% popover namespaces %}, and other entities that need to be globally consistent.
 * Each cluster has its own local ZooKeeper ensemble that stores {% popover cluster %}-specific configuration and coordination such as ownership metadata, broker load reports, BookKeeper {% popover ledger %} metadata, and more.
 
+When creating a [new cluster](../../admin/ClustersBrokers#initialize-cluster-metadata)
+
 ## Persistent storage
 
-![Brokers and bookies]({{ site.baseurl }}img/broker-bookie.png)
+![Brokers and bookies](/img/broker-bookie.png)
 
 Pulsar provides guaranteed message delivery for applications. If a message successfully reaches a Pulsar {% popover broker %}, it will be delivered to its intended target.
 
