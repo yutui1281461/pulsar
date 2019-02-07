@@ -33,21 +33,12 @@ import javax.ws.rs.InternalServerErrorException;
 import org.apache.pulsar.broker.authentication.AuthenticationProviderTls;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.admin.PulsarAdminException;
-import org.apache.pulsar.client.api.Authentication;
-import org.apache.pulsar.client.api.Consumer;
-import org.apache.pulsar.client.api.ConsumerConfiguration;
-import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.ProducerConfiguration;
-import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.SubscriptionType;
 import org.apache.pulsar.client.impl.auth.AuthenticationTls;
 import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.PropertyAdmin;
-import org.junit.Assert;
-import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.DataProvider;
@@ -172,7 +163,7 @@ public class AuthenticatedProducerConsumerTest extends ProducerConsumerBase {
 
     /**
      * Verifies: on 500 server error, broker invalidates session and client receives 500 correctly.
-     * 
+     *
      * @throws Exception
      */
     @Test
@@ -203,7 +194,7 @@ public class AuthenticatedProducerConsumerTest extends ProducerConsumerBase {
     /**
      * verifies that topicLookup/PartitionMetadataLookup gives InternalServerError(500) instead 401(auth_failed) on
      * unknown-exception failure
-     * 
+     *
      * @throws Exception
      */
     @Test

@@ -25,18 +25,11 @@ import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.pulsar.client.admin.PulsarAdmin;
-import org.apache.pulsar.client.api.Consumer;
-import org.apache.pulsar.client.api.ConsumerConfiguration;
-import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.ProducerConfiguration;
-import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.SubscriptionType;
 import org.apache.pulsar.common.policies.data.ClusterData;
 import org.apache.pulsar.common.policies.data.PropertyAdmin;
-import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -84,7 +77,7 @@ public class TlsProducerConsumerTest extends ProducerConsumerBase {
     /**
      * verifies that messages whose size is larger than 2^14 bytes (max size of single TLS chunk) can be
      * produced/consumed
-     * 
+     *
      * @throws Exception
      */
     @Test
@@ -121,7 +114,7 @@ public class TlsProducerConsumerTest extends ProducerConsumerBase {
             msg = consumer.receive(5, TimeUnit.SECONDS);
             byte[] expected = new byte[MESSAGE_SIZE];
             Arrays.fill(expected, (byte) i);
-            Assert.assertArrayEquals(expected, msg.getData());
+            Assert.assertEquals(msg.getData(), expected);
         }
         // Acknowledge the consumption of all messages at once
         consumer.acknowledgeCumulative(msg);
