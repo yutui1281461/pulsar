@@ -420,7 +420,9 @@ public class PersistentDispatcherFailoverConsumerTest {
 
     private Consumer getNextConsumer(PersistentDispatcherMultipleConsumers dispatcher) throws Exception {
         
-        Consumer consumer = dispatcher.getNextConsumer();
+        Method getNextConsumerMethod = PersistentDispatcherMultipleConsumers.class.getDeclaredMethod("getNextConsumer");
+        getNextConsumerMethod.setAccessible(true);
+        Consumer consumer = (Consumer) getNextConsumerMethod.invoke(dispatcher);
         
         if (consumer != null) {
             Field field = Consumer.class.getDeclaredField("MESSAGE_PERMITS_UPDATER");
