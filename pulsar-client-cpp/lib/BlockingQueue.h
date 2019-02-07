@@ -19,8 +19,8 @@
 #ifndef LIB_BLOCKINGQUEUE_H_
 #define LIB_BLOCKINGQUEUE_H_
 
-#include <mutex>
-#include <condition_variable>
+#include <boost/thread/mutex.hpp>
+#include <boost/thread/condition.hpp>
 #include <boost/circular_buffer.hpp>
 
 /**
@@ -28,34 +28,52 @@
  * This is done in order to avoid spurious wake up problem.
  * Details: https://www.justsoftwaresolutions.co.uk/threading/condition-variable-spurious-wakes.html
  */
-template <typename Container>
+template<typename Container>
 struct QueueNotEmpty {
     const Container& queue_;
-    QueueNotEmpty(const Container& queue) : queue_(queue) {}
-    bool operator()() const { return !queue_.isEmptyNoMutex(); }
+    QueueNotEmpty(const Container& queue)
+            : queue_(queue) {
+
+    }
+    bool operator()() const {
+        return !queue_.isEmptyNoMutex();
+    }
 };
 
-template <typename Container>
+template<typename Container>
 struct QueueNotFull {
     const Container& queue_;
-    QueueNotFull(const Container& queue) : queue_(queue) {}
-    bool operator()() const { return !queue_.isFullNoMutex(); }
+    QueueNotFull(const Container& queue)
+            : queue_(queue) {
+
+    }
+    bool operator()() const {
+        return !queue_.isFullNoMutex();
+    }
 };
 
-template <typename T>
+template<typename T>
 class BlockingQueue {
-   public:
+ public:
     typedef typename boost::circular_buffer<T> Container;
     typedef typename Container::iterator iterator;
     typedef typename Container::const_iterator const_iterator;
 
     class ReservedSpot {
-       public:
-        ReservedSpot() : queue_(), released_(true) {}
+     public:
+        ReservedSpot()
+                : queue_(),
+                  released_(true) {
+        }
 
-        ReservedSpot(BlockingQueue<T>& queue) : queue_(&queue), released_(false) {}
+        ReservedSpot(BlockingQueue<T>& queue)
+                : queue_(&queue),
+                  released_(false) {
+        }
 
-        ~ReservedSpot() { release(); }
+        ~ReservedSpot() {
+            release();
+        }
 
         void release() {
             if (!released_) {
@@ -64,19 +82,24 @@ class BlockingQueue {
             }
         }
 
-       private:
+     private:
         BlockingQueue<T>* queue_;
         bool released_;
 
-        friend class BlockingQueue<T>;
+        friend class BlockingQueue<T> ;
     };
 
-    BlockingQueue(size_t maxSize) : maxSize_(maxSize), mutex_(), queue_(maxSize), reservedSpots_(0) {}
+    BlockingQueue(size_t maxSize)
+            : maxSize_(maxSize),
+              mutex_(),
+              queue_(maxSize),
+              reservedSpots_(0) {
+    }
 
     bool tryReserve(size_t noOfSpots) {
         assert(noOfSpots <= maxSize_);
         Lock lock(mutex_);
-        if (noOfSpots <= maxSize_ - (reservedSpots_ + queue_.size())) {
+        if(noOfSpots <= maxSize_ - (reservedSpots_ + queue_.size())) {
             reservedSpots_ += noOfSpots;
             return true;
         }
@@ -86,7 +109,7 @@ class BlockingQueue {
     void reserve(size_t noOfSpots) {
         assert(noOfSpots <= maxSize_);
         Lock lock(mutex_);
-        while (noOfSpots--) {
+        while(noOfSpots--) {
             queueFullCondition.wait(lock, QueueNotFull<BlockingQueue<T> >(*this));
             reservedSpots_++;
         }
@@ -199,10 +222,10 @@ class BlockingQueue {
         }
     }
 
-    template <typename Duration>
-    bool pop(T& value, const Duration& timeout) {
+    bool pop(T& value, const boost::posix_time::time_duration& timeout) {
         Lock lock(mutex_);
-        if (!queueEmptyCondition.wait_for(lock, timeout, QueueNotEmpty<BlockingQueue<T> >(*this))) {
+        if (!queueEmptyCondition.timed_wait(lock, timeout,
+                                            QueueNotEmpty<BlockingQueue<T> >(*this))) {
             return false;
         }
 
@@ -242,7 +265,9 @@ class BlockingQueue {
         return queue_.size();
     }
 
-    size_t maxSize() const { return maxSize_; }
+    size_t maxSize() const {
+        return maxSize_;
+    }
 
     bool empty() const {
         Lock lock(mutex_);
@@ -254,15 +279,23 @@ class BlockingQueue {
         return isFullNoMutex();
     }
 
-    const_iterator begin() const { return queue_.begin(); }
+    const_iterator begin() const {
+        return queue_.begin();
+    }
 
-    const_iterator end() const { return queue_.end(); }
+    const_iterator end() const {
+        return queue_.end();
+    }
 
-    iterator begin() { return queue_.begin(); }
+    iterator begin() {
+        return queue_.begin();
+    }
 
-    iterator end() { return queue_.end(); }
+    iterator end() {
+        return queue_.end();
+    }
 
-   private:
+ private:
     void releaseReservedSpot() {
         Lock lock(mutex_);
         bool wasFull = isFullNoMutex();
@@ -275,21 +308,25 @@ class BlockingQueue {
         }
     }
 
-    bool isEmptyNoMutex() const { return queue_.empty(); }
+    bool isEmptyNoMutex() const {
+        return queue_.empty();
+    }
 
-    bool isFullNoMutex() const { return (queue_.size() + reservedSpots_) == maxSize_; }
+    bool isFullNoMutex() const {
+        return (queue_.size() + reservedSpots_) == maxSize_;
+    }
 
     const size_t maxSize_;
-    mutable std::mutex mutex_;
-    std::condition_variable queueFullCondition;
-    std::condition_variable queueEmptyCondition;
+    mutable boost::mutex mutex_;
+    boost::condition_variable queueFullCondition;
+    boost::condition_variable queueEmptyCondition;
     Container queue_;
     int reservedSpots_;
 
-    typedef std::unique_lock<std::mutex> Lock;
+    typedef boost::unique_lock<boost::mutex> Lock;
     friend class QueueReservedSpot;
-    friend struct QueueNotEmpty<BlockingQueue<T> >;
-    friend struct QueueNotFull<BlockingQueue<T> >;
+    friend struct QueueNotEmpty<BlockingQueue<T> > ;
+    friend struct QueueNotFull<BlockingQueue<T> > ;
 };
 
 #endif /* LIB_BLOCKINGQUEUE_H_ */

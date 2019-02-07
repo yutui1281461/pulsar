@@ -22,7 +22,6 @@ description: |
 commands:
 - name: consume
   description: Run a consumer
-  argument: topic_name
   options:
   - flags: --auth_params
     description: Authentication parameters in the form of `key1:val1,key2:val2`
@@ -57,7 +56,6 @@ commands:
     default: 100
   - flags: -u, --service-url
     description: Pulsar service URL
-    default: 'http://localhost:8080/'
   - flags: -s, --size
     description: Message size (in bytes)
     default: 1024
@@ -69,7 +67,6 @@ commands:
     default: 0
 - name: produce
   description: Run a producer
-  argument: topic_name
   options:
   - flags: --auth_params
     description: Authentication parameters in the form of `key1:val1,key2:val2`
@@ -105,7 +102,6 @@ commands:
     default: 100
   - flags: -u, --service-url
     description: Pulsar service URL
-    default: 'http://localhost:8080/'
   - flags: -s, --size
     description: Message size (in bytes)
     default: 1024
@@ -117,21 +113,13 @@ commands:
     default: 0
 - name: monitor-brokers
   description: Continuously receive broker data and/or load reports
-  argument: --connect-string arg
   options:
   - flags: --connect-string
-    description: A connection string for one or more ZooKeeper servers
+    description: A connection string for one or more brokers
 - name: simulation-client
   description: Run a simulation server acting as a Pulsar client. Uses the client configuration specified in `conf/client.conf`.
-  argument: --port arg --service-url arg
-  options:
-  - flags: --port
-    description: Port to listen on for controller
-  - flags: --service-url
-    description: Pulsar Service URL
 - name: simulation-controller
   description: Run a simulation controller to give commands to servers
-  argument: --client-port arg --clients arg --cluster arg
   options:
   - flags: --client-port
     description: The port that the clients are listening on
@@ -143,7 +131,7 @@ commands:
 env_vars:
 - name: PULSAR_LOG_CONF
   description: Log4j configuration file
-  default: conf/log4j2.yaml
+  default: conf/log4j.properties
 - name: PULSAR_CLIENT_CONF
   description: Configuration file for the client
   default: conf/client.conf

@@ -19,30 +19,24 @@
 package org.apache.pulsar.broker.service;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.bookkeeper.mledger.Entry;
-import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
+import org.apache.pulsar.common.api.proto.PulsarApi;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandAck.AckType;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandSubscribe.SubType;
 
 public interface Subscription {
-
-    Topic getTopic();
-
-    String getName();
-
     void addConsumer(Consumer consumer) throws BrokerServiceException;
 
     void removeConsumer(Consumer consumer) throws BrokerServiceException;
 
     void consumerFlow(Consumer consumer, int additionalNumberOfMessages);
 
-    void acknowledgeMessage(List<Position> positions, AckType ackType, Map<String,Long> properties);
+    void acknowledgeMessage(PositionImpl position, AckType ackType);
 
-    String getTopicName();
+    String getDestination();
 
     Dispatcher getDispatcher();
 
@@ -64,8 +58,6 @@ public interface Subscription {
 
     CompletableFuture<Void> resetCursor(long timestamp);
 
-    CompletableFuture<Void> resetCursor(Position position);
-
     CompletableFuture<Entry> peekNthMessage(int messagePosition);
 
     void expireMessages(int messageTTLInSeconds);
@@ -75,11 +67,11 @@ public interface Subscription {
     void redeliverUnacknowledgedMessages(Consumer consumer, List<PositionImpl> positions);
 
     void markTopicWithBatchMessagePublished();
-
+    
     double getExpiredMessageRate();
-
+    
     SubType getType();
-
+    
     String getTypeString();
 
     void addUnAckedMessages(int unAckMessages);

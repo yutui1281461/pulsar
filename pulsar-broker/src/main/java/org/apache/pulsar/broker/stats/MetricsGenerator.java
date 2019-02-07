@@ -24,7 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.pulsar.broker.PulsarService;
-import org.apache.pulsar.common.stats.JvmMetrics;
+import org.apache.pulsar.broker.stats.metrics.JvmMetrics;
 import org.apache.pulsar.broker.stats.metrics.ManagedLedgerCacheMetrics;
 import org.apache.pulsar.broker.stats.metrics.ManagedLedgerMetrics;
 import org.apache.pulsar.common.stats.Metrics;
@@ -38,8 +38,7 @@ public class MetricsGenerator {
 
     public MetricsGenerator(PulsarService pulsar) {
         this.pulsar = pulsar;
-        this.jvmMetrics = JvmMetrics.create(pulsar.getExecutor(), "brk",
-                pulsar.getConfiguration().getJvmGCMetricsLoggerClassName());
+        this.jvmMetrics = new JvmMetrics(pulsar);
     }
 
     public Collection<Metrics> generate() {
@@ -53,7 +52,7 @@ public class MetricsGenerator {
         metricsCollection.addAll(jvmMetrics.generate());
         metricsCollection.addAll(new ManagedLedgerCacheMetrics(pulsar).generate());
         metricsCollection.addAll(new ManagedLedgerMetrics(pulsar).generate());
-        metricsCollection.addAll(pulsar.getBrokerService().getTopicMetrics());
+        metricsCollection.addAll(pulsar.getBrokerService().getDestinationMetrics());
         metricsCollection.addAll(pulsar.getLoadManager().get().getLoadBalancingMetrics());
 
         return metricsCollection;

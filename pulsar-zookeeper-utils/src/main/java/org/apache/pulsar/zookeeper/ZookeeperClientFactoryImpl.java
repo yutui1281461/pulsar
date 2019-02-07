@@ -75,7 +75,7 @@ public class ZookeeperClientFactoryImpl implements ZooKeeperClientFactory {
                 return null;
             });
 
-        } catch (IllegalArgumentException | IOException e) {
+        } catch (IOException e) {
             future.completeExceptionally(e);
         }
 

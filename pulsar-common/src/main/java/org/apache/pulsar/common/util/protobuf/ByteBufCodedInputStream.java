@@ -1,3 +1,25 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+/**
+ * This file is derived from Google ProcolBuffer CodedInputStream class
+ */
+
 // Protocol Buffers - Google's data interchange format
 // Copyright 2008 Google Inc.  All rights reserved.
 // http://code.google.com/p/protobuf/
@@ -28,24 +50,21 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-/*
- * This file is derived from Google ProcolBuffer CodedInputStream class
- * with adaptations to work directly with Netty ByteBuf instances.
- */
-
 package org.apache.pulsar.common.util.protobuf;
+
+import java.io.IOException;
+import java.nio.ByteOrder;
+
+import org.apache.pulsar.common.api.Commands.RecyclableHeapByteBuf;
+
+import com.google.protobuf.ByteString;
+import com.google.protobuf.ExtensionRegistryLite;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.WireFormat;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.util.Recycler;
 import io.netty.util.Recycler.Handle;
-import io.netty.util.concurrent.FastThreadLocal;
-
-import java.io.IOException;
-
-import org.apache.pulsar.shaded.com.google.protobuf.v241.ByteString;
-import org.apache.pulsar.shaded.com.google.protobuf.v241.ExtensionRegistryLite;
-import org.apache.pulsar.shaded.com.google.protobuf.v241.InvalidProtocolBufferException;
-import org.apache.pulsar.shaded.com.google.protobuf.v241.WireFormat;
 
 public class ByteBufCodedInputStream {
     public static interface ByteBufMessageBuilder {
@@ -56,7 +75,7 @@ public class ByteBufCodedInputStream {
     private ByteBuf buf;
     private int lastTag;
 
-    private final Handle<ByteBufCodedInputStream> recyclerHandle;
+    private final Handle recyclerHandle;
 
     public static ByteBufCodedInputStream get(ByteBuf buf) {
         ByteBufCodedInputStream stream = RECYCLER.get();
@@ -65,12 +84,12 @@ public class ByteBufCodedInputStream {
         return stream;
     }
 
-    private ByteBufCodedInputStream(Handle<ByteBufCodedInputStream> handle) {
+    private ByteBufCodedInputStream(Handle handle) {
         this.recyclerHandle = handle;
     }
 
     private static final Recycler<ByteBufCodedInputStream> RECYCLER = new Recycler<ByteBufCodedInputStream>() {
-        protected ByteBufCodedInputStream newObject(Recycler.Handle<ByteBufCodedInputStream> handle) {
+        protected ByteBufCodedInputStream newObject(Recycler.Handle handle) {
             return new ByteBufCodedInputStream(handle);
         }
     };
@@ -78,7 +97,7 @@ public class ByteBufCodedInputStream {
     public void recycle() {
         this.buf = null;
         if (recyclerHandle != null) {
-            recyclerHandle.recycle(this);
+            RECYCLER.recycle(this, recyclerHandle);
         }
     }
 
@@ -126,22 +145,20 @@ public class ByteBufCodedInputStream {
         buf.writerIndex(writerIdx);
     }
 
-    private static final FastThreadLocal<byte[]> localByteArray = new FastThreadLocal<>();
-
     /** Read a {@code bytes} field value from the stream. */
     public ByteString readBytes() throws IOException {
         final int size = readRawVarint32();
         if (size == 0) {
             return ByteString.EMPTY;
         } else {
-            byte[] localBuf = localByteArray.get();
-            if (localBuf == null || localBuf.length < size) {
-                localBuf = new byte[Math.max(size, 1024)];
-                localByteArray.set(localBuf);
+            RecyclableHeapByteBuf heapBuf = RecyclableHeapByteBuf.get();
+            if (size > heapBuf.writableBytes()) {
+                heapBuf.capacity(size);
             }
 
-            buf.readBytes(localBuf, 0, size);
-            ByteString res = ByteString.copyFrom(localBuf, 0, size);
+            heapBuf.writeBytes(buf, size);
+            ByteString res = ByteString.copyFrom(heapBuf.array(), heapBuf.arrayOffset(), heapBuf.readableBytes());
+            heapBuf.recycle();
             return res;
         }
     }
@@ -199,7 +216,7 @@ public class ByteBufCodedInputStream {
      */
     public void checkLastTagWas(final int value) throws InvalidProtocolBufferException {
         if (lastTag != value) {
-            throw new InvalidProtocolBufferException("Protocol message end-group tag did not match expected tag.");
+            new InvalidProtocolBufferException("Protocol message end-group tag did not match expected tag.");
         }
     }
 
@@ -297,13 +314,13 @@ public class ByteBufCodedInputStream {
 
     /** Read a 32-bit little-endian integer from the stream. */
     public int readRawLittleEndian32() throws IOException {
-        return buf.readIntLE();
+        return buf.order(ByteOrder.LITTLE_ENDIAN).readInt();
 
     }
 
     /** Read a 64-bit little-endian integer from the stream. */
     public long readRawLittleEndian64() throws IOException {
-        return buf.readLongLE();
+        return buf.order(ByteOrder.LITTLE_ENDIAN).readLong();
     }
 
     public long readSFixed64() throws IOException {

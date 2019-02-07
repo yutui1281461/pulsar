@@ -29,7 +29,7 @@ import org.apache.bookkeeper.mledger.impl.ManagedLedgerFactoryImpl;
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl;
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerMBeanImpl;
 import org.apache.pulsar.broker.PulsarService;
-import org.apache.pulsar.common.policies.data.TopicStats;
+import org.apache.pulsar.common.policies.data.PersistentTopicStats;
 import org.apache.pulsar.common.stats.Metrics;
 
 import com.google.common.collect.Lists;
@@ -211,7 +211,7 @@ abstract class AbstractMetrics {
         Double val = map.getOrDefault(mkey, 0.0);
         map.put(mkey, val + value);
     }
-
+    
     protected void populateMaxMap(Map<String, Long> map, String mkey, long value) {
         Long existingValue = map.get(mkey);
         if (existingValue == null || value > existingValue) {
@@ -220,9 +220,9 @@ abstract class AbstractMetrics {
     }
 
     /**
-     * Helper to manage populating topics map
+     * Helper to manage populating destination map
      *
-     * @param ledgersByDimensionMap
+     * @param destStatsByDimensionMap
      * @param dimensionKey
      * @param destStats
      */
@@ -237,14 +237,14 @@ abstract class AbstractMetrics {
         }
     }
 
-    protected void populateDimensionMap(Map<Metrics, List<TopicStats>> topicsStatsByDimensionMap,
-            Metrics metrics, TopicStats destStats) {
-        if (!topicsStatsByDimensionMap.containsKey(metrics)) {
+    protected void populateDimensionMap(Map<Metrics, List<PersistentTopicStats>> destStatsByDimensionMap,
+            Metrics metrics, PersistentTopicStats destStats) {
+        if (!destStatsByDimensionMap.containsKey(metrics)) {
             // create new list
-            topicsStatsByDimensionMap.put(metrics, Lists.newArrayList(destStats));
+            destStatsByDimensionMap.put(metrics, Lists.newArrayList(destStats));
         } else {
             // add to collection
-            topicsStatsByDimensionMap.get(metrics).add(destStats);
+            destStatsByDimensionMap.get(metrics).add(destStats);
         }
 
     }

@@ -20,11 +20,16 @@
 
 namespace pulsar {
 
-ClientConfiguration::ClientConfiguration() : impl_(std::make_shared<ClientConfigurationImpl>()) {}
+ClientConfiguration::ClientConfiguration()
+        : impl_(boost::make_shared<ClientConfigurationImpl>()) {
+}
 
-ClientConfiguration::~ClientConfiguration() {}
+ClientConfiguration::~ClientConfiguration() {
+}
 
-ClientConfiguration::ClientConfiguration(const ClientConfiguration& x) : impl_(x.impl_) {}
+ClientConfiguration::ClientConfiguration(const ClientConfiguration& x)
+    : impl_(x.impl_) {
+}
 
 ClientConfiguration& ClientConfiguration::operator=(const ClientConfiguration& x) {
     impl_ = x.impl_;
@@ -36,82 +41,87 @@ ClientConfiguration& ClientConfiguration::setAuth(const AuthenticationPtr& authe
     return *this;
 }
 
-const Authentication& ClientConfiguration::getAuth() const { return *impl_->authenticationPtr; }
+const Authentication& ClientConfiguration::getAuth() const {
+    return *impl_->authenticationPtr;
+}
 
-const AuthenticationPtr& ClientConfiguration::getAuthPtr() const { return impl_->authenticationPtr; }
+const AuthenticationPtr& ClientConfiguration::getAuthPtr() const {
+    return impl_->authenticationPtr;
+}
 
 ClientConfiguration& ClientConfiguration::setOperationTimeoutSeconds(int timeout) {
     impl_->operationTimeoutSeconds = timeout;
     return *this;
 }
 
-int ClientConfiguration::getOperationTimeoutSeconds() const { return impl_->operationTimeoutSeconds; }
+int ClientConfiguration::getOperationTimeoutSeconds() const {
+    return impl_->operationTimeoutSeconds;
+}
 
 ClientConfiguration& ClientConfiguration::setIOThreads(int threads) {
     impl_->ioThreads = threads;
     return *this;
 }
 
-int ClientConfiguration::getIOThreads() const { return impl_->ioThreads; }
+int ClientConfiguration::getIOThreads() const {
+    return impl_->ioThreads;
+}
 
 ClientConfiguration& ClientConfiguration::setMessageListenerThreads(int threads) {
     impl_->messageListenerThreads = threads;
     return *this;
 }
 
-int ClientConfiguration::getMessageListenerThreads() const { return impl_->messageListenerThreads; }
+int ClientConfiguration::getMessageListenerThreads() const {
+    return impl_->messageListenerThreads;
+}
 
 ClientConfiguration& ClientConfiguration::setUseTls(bool useTls) {
     impl_->useTls = useTls;
     return *this;
 }
 
-bool ClientConfiguration::isUseTls() const { return impl_->useTls; }
-
-ClientConfiguration& ClientConfiguration::setValidateHostName(bool validateHostName) {
-    impl_->validateHostName = validateHostName;
-    return *this;
+bool ClientConfiguration::isUseTls() const {
+    return impl_->useTls;
 }
 
-bool ClientConfiguration::isValidateHostName() const { return impl_->validateHostName; }
-
-ClientConfiguration& ClientConfiguration::setTlsTrustCertsFilePath(const std::string& filePath) {
+ClientConfiguration& ClientConfiguration::setTlsTrustCertsFilePath(const std::string &filePath) {
     impl_->tlsTrustCertsFilePath = filePath;
     return *this;
 }
 
-std::string ClientConfiguration::getTlsTrustCertsFilePath() const { return impl_->tlsTrustCertsFilePath; }
+std::string ClientConfiguration::getTlsTrustCertsFilePath() const {
+    return impl_->tlsTrustCertsFilePath;
+}
 
 ClientConfiguration& ClientConfiguration::setTlsAllowInsecureConnection(bool allowInsecure) {
     impl_->tlsAllowInsecureConnection = allowInsecure;
     return *this;
 }
 
-bool ClientConfiguration::isTlsAllowInsecureConnection() const { return impl_->tlsAllowInsecureConnection; }
+bool ClientConfiguration::isTlsAllowInsecureConnection() const {
+    return impl_->tlsAllowInsecureConnection;
+}
 
 ClientConfiguration& ClientConfiguration::setConcurrentLookupRequest(int concurrentLookupRequest) {
     impl_->concurrentLookupRequest = concurrentLookupRequest;
     return *this;
 }
 
-int ClientConfiguration::getConcurrentLookupRequest() const { return impl_->concurrentLookupRequest; }
+int ClientConfiguration::getConcurrentLookupRequest() const {
+    return impl_->concurrentLookupRequest;
+}
 
 ClientConfiguration& ClientConfiguration::setLogConfFilePath(const std::string& logConfFilePath) {
     impl_->logConfFilePath = logConfFilePath;
     return *this;
 }
 
-const std::string& ClientConfiguration::getLogConfFilePath() const { return impl_->logConfFilePath; }
-
-ClientConfiguration& ClientConfiguration::setLogger(LoggerFactoryPtr loggerFactory) {
-    impl_->loggerFactory = loggerFactory;
-    return *this;
+const std::string& ClientConfiguration::getLogConfFilePath() const {
+    return impl_->logConfFilePath;
 }
 
-LoggerFactoryPtr ClientConfiguration::getLogger() const { return impl_->loggerFactory; }
-
-ClientConfiguration& ClientConfiguration::setStatsIntervalInSeconds(
-    const unsigned int& statsIntervalInSeconds) {
+ClientConfiguration& ClientConfiguration::setStatsIntervalInSeconds(const unsigned int& statsIntervalInSeconds) {
     impl_->statsIntervalInSeconds = statsIntervalInSeconds;
     return *this;
 }
@@ -119,4 +129,5 @@ ClientConfiguration& ClientConfiguration::setStatsIntervalInSeconds(
 const unsigned int& ClientConfiguration::getStatsIntervalInSeconds() const {
     return impl_->statsIntervalInSeconds;
 }
-}  // namespace pulsar
+
+}

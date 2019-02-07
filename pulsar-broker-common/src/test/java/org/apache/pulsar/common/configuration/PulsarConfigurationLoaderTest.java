@@ -32,54 +32,12 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.util.Properties;
 
-import org.apache.bookkeeper.client.api.DigestType;
 import org.apache.pulsar.broker.ServiceConfiguration;
+import org.apache.pulsar.common.configuration.FieldContext;
+import org.apache.pulsar.common.configuration.PulsarConfigurationLoader;
 import org.testng.annotations.Test;
 
 public class PulsarConfigurationLoaderTest {
-    public class MockConfiguration implements PulsarConfiguration {
-        private Properties properties = new Properties();
-
-        private String zookeeperServers = "localhost:2181";
-        private String configurationStoreServers = "localhost:2184";
-        private int brokerServicePort = 7650;
-        private int brokerServicePortTls = 7651;
-        private int webServicePort = 9080;
-        private int webServicePortTls = 9443;
-        private int notExistFieldInServiceConfig = 0;
-
-        @Override
-        public Properties getProperties() {
-            return properties;
-        }
-
-        @Override
-        public void setProperties(Properties properties) {
-            this.properties = properties;
-        }
-    }
-
-    @Test
-    public void testConfigurationConverting() throws Exception {
-        MockConfiguration mockConfiguration = new MockConfiguration();
-        ServiceConfiguration serviceConfiguration = PulsarConfigurationLoader.convertFrom(mockConfiguration);
-
-        // check whether converting correctly
-        assertEquals(serviceConfiguration.getZookeeperServers(), "localhost:2181");
-        assertEquals(serviceConfiguration.getConfigurationStoreServers(), "localhost:2184");
-        assertEquals(serviceConfiguration.getBrokerServicePort().get(), new Integer(7650));
-        assertEquals(serviceConfiguration.getBrokerServicePortTls().get(), new Integer(7651));
-        assertEquals(serviceConfiguration.getWebServicePort().get(), new Integer(9080));
-        assertEquals(serviceConfiguration.getWebServicePortTls().get(), new Integer(9443));
-
-        // check whether exception causes
-        try {
-            PulsarConfigurationLoader.convertFrom(mockConfiguration, false);
-            fail();
-        } catch (Exception e) {
-            assertEquals(e.getClass(), IllegalArgumentException.class);
-        }
-    }
 
     @Test
     public void testPulsarConfiguraitonLoadingStream() throws Exception {
@@ -90,7 +48,7 @@ public class PulsarConfigurationLoaderTest {
         final String zkServer = "z1.example.com,z2.example.com,z3.example.com";
         PrintWriter printWriter = new PrintWriter(new OutputStreamWriter(new FileOutputStream(testConfigFile)));
         printWriter.println("zookeeperServers=" + zkServer);
-        printWriter.println("configurationStoreServers=gz1.example.com,gz2.example.com,gz3.example.com/foo");
+        printWriter.println("globalZookeeperServers=gz1.example.com,gz2.example.com,gz3.example.com/foo");
         printWriter.println("brokerDeleteInactiveTopicsEnabled=true");
         printWriter.println("statusFilePath=/tmp/status.html");
         printWriter.println("managedLedgerDefaultEnsembleSize=1");
@@ -101,7 +59,6 @@ public class PulsarConfigurationLoaderTest {
         printWriter.println("superUserRoles=appid1,appid2");
         printWriter.println("brokerServicePort=7777");
         printWriter.println("managedLedgerDefaultMarkDeleteRateLimit=5.0");
-        printWriter.println("managedLedgerDigestType=CRC32C");
         printWriter.close();
         testConfigFile.deleteOnExit();
         InputStream stream = new FileInputStream(testConfigFile);
@@ -112,8 +69,7 @@ public class PulsarConfigurationLoaderTest {
         assertEquals(serviceConfig.getBacklogQuotaDefaultLimitGB(), 18);
         assertEquals(serviceConfig.getClusterName(), "usc");
         assertEquals(serviceConfig.getBrokerClientAuthenticationParameters(), "role:my-role");
-        assertEquals(serviceConfig.getBrokerServicePort().get(), new Integer(7777));
-        assertEquals(serviceConfig.getManagedLedgerDigestType(), DigestType.CRC32C);
+        assertEquals(serviceConfig.getBrokerServicePort(), 7777);
     }
 
     @Test

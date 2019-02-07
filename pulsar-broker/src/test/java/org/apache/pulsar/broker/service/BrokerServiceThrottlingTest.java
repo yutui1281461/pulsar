@@ -19,13 +19,12 @@
 package org.apache.pulsar.broker.service;
 
 import static org.apache.pulsar.broker.service.BrokerService.BROKER_SERVICE_CONFIGURATION_PATH;
-import static org.mockito.Mockito.doReturn;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.fail;
 
+import java.lang.reflect.Method;
 import java.net.URI;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -34,7 +33,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.bookkeeper.util.ZkUtils;
+import org.apache.pulsar.broker.service.BrokerService;
 import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.ConsumerConfiguration;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.SubscriptionType;
@@ -42,7 +43,6 @@ import org.apache.pulsar.client.impl.ConsumerImpl;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.ZooDefs;
-import org.mockito.Mockito;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -68,7 +68,7 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
 
     /**
      * Verifies: updating zk-thottling node reflects broker-maxConcurrentLookupRequest and updates semaphore.
-     *
+     * 
      * @throws Exception
      */
     @Test
@@ -83,19 +83,21 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
     /**
      * Broker has maxConcurrentLookupRequest = 0 so, it rejects incoming lookup request and it cause consumer creation
      * failure.
-     *
+     * 
      * @throws Exception
      */
     @Test
     public void testLookupThrottlingForClientByBroker0Permit() throws Exception {
 
-        final String topicName = "persistent://prop/ns-abc/newTopic";
+        final String topicName = "persistent://prop/usw/my-ns/newTopic";
 
+        org.apache.pulsar.client.api.ClientConfiguration clientConf = new org.apache.pulsar.client.api.ClientConfiguration();
+        clientConf.setStatsInterval(0, TimeUnit.SECONDS);
         String lookupUrl = new URI("pulsar://localhost:" + BROKER_PORT).toString();
-        PulsarClient pulsarClient = PulsarClient.builder().serviceUrl(lookupUrl).statsInterval(0, TimeUnit.SECONDS)
-                .build();
+        PulsarClient pulsarClient = PulsarClient.create(lookupUrl, clientConf);
 
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName).subscriptionName("mysub").subscribe();
+        ConsumerConfiguration consumerConfig = new ConsumerConfiguration();
+        Consumer consumer = pulsarClient.subscribe(topicName, "mysub", consumerConfig);
         consumer.close();
 
         int newPermits = 0;
@@ -110,7 +112,7 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
         }
 
         try {
-            consumer = pulsarClient.newConsumer().topic(topicName).subscriptionName("mysub").subscribe();
+            consumer = pulsarClient.subscribe(topicName, "mysub", consumerConfig);
             consumer.close();
             fail("It should fail as throttling should not receive any request");
         } catch (org.apache.pulsar.client.api.PulsarClientException.TooManyRequestsException e) {
@@ -120,21 +122,27 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
 
     /**
      * Verifies: Broker side throttling:
-     *
+     * 
      * <pre>
-     * 1. concurrent_consumer_creation > maxConcurrentLookupRequest at broker
+     * 1. concurrent_consumer_creation > maxConcurrentLookupRequest at broker 
      * 2. few of the consumer creation must fail with TooManyLookupRequestException.
      * </pre>
-     *
+     * 
      * @throws Exception
      */
     @Test
     public void testLookupThrottlingForClientByBroker() throws Exception {
-        final String topicName = "persistent://prop/ns-abc/newTopic";
+        final String topicName = "persistent://prop/usw/my-ns/newTopic";
 
+        org.apache.pulsar.client.api.ClientConfiguration clientConf = new org.apache.pulsar.client.api.ClientConfiguration();
+        clientConf.setStatsInterval(0, TimeUnit.SECONDS);
+        clientConf.setIoThreads(20);
+        clientConf.setConnectionsPerBroker(20);
         String lookupUrl = new URI("pulsar://localhost:" + BROKER_PORT).toString();
-        PulsarClient pulsarClient = PulsarClient.builder().serviceUrl(lookupUrl).statsInterval(0, TimeUnit.SECONDS)
-                .ioThreads(20).connectionsPerBroker(20).build();
+        PulsarClient pulsarClient = PulsarClient.create(lookupUrl, clientConf);
+
+        ConsumerConfiguration consumerConfig = new ConsumerConfiguration();
+        consumerConfig.setSubscriptionType(SubscriptionType.Shared);
 
         int newPermits = 1;
         admin.brokers().updateDynamicConfiguration("maxConcurrentLookupRequest", Integer.toString(newPermits));
@@ -147,15 +155,14 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
             }
         }
 
-        List<Consumer<byte[]>> successfulConsumers = Collections.synchronizedList(Lists.newArrayList());
+        List<Consumer> successfulConsumers = Lists.newArrayList();
         ExecutorService executor = Executors.newFixedThreadPool(10);
         final int totalConsumers = 20;
         CountDownLatch latch = new CountDownLatch(totalConsumers);
         for (int i = 0; i < totalConsumers; i++) {
             executor.execute(() -> {
                 try {
-                    successfulConsumers.add(pulsarClient.newConsumer().topic(topicName).subscriptionName("mysub")
-                            .subscriptionType(SubscriptionType.Shared).subscribe());
+                    successfulConsumers.add(pulsarClient.subscribe(topicName, "mysub", consumerConfig));
                 } catch (PulsarClientException.TooManyRequestsException e) {
                     // ok
                 } catch (Exception e) {
@@ -166,47 +173,48 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
         }
         latch.await();
 
-        for (Consumer<?> c : successfulConsumers) {
-            if (c != null) {
-                c.close();
-            }
+        for (int i = 0; i < successfulConsumers.size(); i++) {
+            successfulConsumers.get(i).close();
         }
         pulsarClient.close();
-        executor.shutdown();
         assertNotEquals(successfulConsumers.size(), totalConsumers);
     }
 
     /**
      * This testcase make sure that once consumer lost connection with broker, it always reconnects with broker by
      * retrying on throttling-error exception also.
-     *
+     * 
      * <pre>
-     * 1. all consumers get connected
-     * 2. broker restarts with maxConcurrentLookupRequest = 1
+     * 1. all consumers get connected 
+     * 2. broker restarts with maxConcurrentLookupRequest = 1 
      * 3. consumers reconnect and some get TooManyRequestException and again retries
      * 4. eventually all consumers will successfully connect to broker
      * </pre>
-     *
+     * 
      * @throws Exception
      */
     @Test
     public void testLookupThrottlingForClientByBrokerInternalRetry() throws Exception {
 
-        final String topicName = "persistent://prop/ns-abc/newTopic";
+        final String topicName = "persistent://prop/usw/my-ns/newTopic";
 
+        org.apache.pulsar.client.api.ClientConfiguration clientConf = new org.apache.pulsar.client.api.ClientConfiguration();
+        clientConf.setStatsInterval(0, TimeUnit.SECONDS);
+        clientConf.setIoThreads(20);
+        clientConf.setConnectionsPerBroker(20);
         String lookupUrl = new URI("pulsar://localhost:" + BROKER_PORT).toString();
-        PulsarClient pulsarClient = PulsarClient.builder().serviceUrl(lookupUrl).statsInterval(0, TimeUnit.SECONDS)
-                .ioThreads(20).connectionsPerBroker(20).build();
+        PulsarClient pulsarClient = PulsarClient.create(lookupUrl, clientConf);
         upsertLookupPermits(100);
-        List<Consumer<byte[]>> consumers = Collections.synchronizedList(Lists.newArrayList());
+        ConsumerConfiguration consumerConfig = new ConsumerConfiguration();
+        consumerConfig.setSubscriptionType(SubscriptionType.Shared);
+        List<Consumer> consumers = Lists.newArrayList();
         ExecutorService executor = Executors.newFixedThreadPool(10);
         final int totalConsumers = 8;
         CountDownLatch latch = new CountDownLatch(totalConsumers);
         for (int i = 0; i < totalConsumers; i++) {
             executor.execute(() -> {
                 try {
-                    consumers.add(pulsarClient.newConsumer().topic(topicName).subscriptionName("mysub")
-                            .subscriptionType(SubscriptionType.Shared).subscribe());
+                    consumers.add(pulsarClient.subscribe(topicName, "mysub", consumerConfig));
                 } catch (PulsarClientException.TooManyRequestsException e) {
                     // ok
                 } catch (Exception e) {
@@ -222,11 +230,17 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
         startBroker();
 
         // wait strategically for all consumers to reconnect
-        retryStrategically((test) -> areAllConsumersConnected(consumers), 5, 500);
+        for (int i = 0; i < 5; i++) {
+            if (!areAllConsumersConnected(consumers)) {
+                Thread.sleep(1000 + (i * 500));
+            } else {
+                break;
+            }
+        }
 
         int totalConnectedConsumers = 0;
         for (int i = 0; i < consumers.size(); i++) {
-            if (((ConsumerImpl<?>) consumers.get(i)).isConnected()) {
+            if (((ConsumerImpl) consumers.get(i)).isConnected()) {
                 totalConnectedConsumers++;
             }
             consumers.get(i).close();
@@ -234,13 +248,12 @@ public class BrokerServiceThrottlingTest extends BrokerTestBase {
         }
         assertEquals(totalConnectedConsumers, totalConsumers);
 
-        executor.shutdown();
         pulsarClient.close();
     }
 
-    private boolean areAllConsumersConnected(List<Consumer<byte[]>> consumers) {
+    private boolean areAllConsumersConnected(List<Consumer> consumers) {
         for (int i = 0; i < consumers.size(); i++) {
-            if (!((ConsumerImpl<?>) consumers.get(i)).isConnected()) {
+            if (!((ConsumerImpl) consumers.get(i)).isConnected()) {
                 return false;
             }
         }

@@ -18,17 +18,11 @@
  */
 package org.apache.pulsar.testclient;
 
-import com.beust.jcommander.JCommander;
-import com.beust.jcommander.Parameter;
-import com.beust.jcommander.ParameterException;
-import com.google.common.util.concurrent.RateLimiter;
-
-import io.netty.util.concurrent.DefaultThreadFactory;
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URL;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -41,13 +35,24 @@ import java.util.function.Function;
 
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.admin.PulsarAdminException;
+import org.apache.pulsar.client.api.ClientConfiguration;
 import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.ConsumerConfiguration;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.MessageListener;
 import org.apache.pulsar.client.api.Producer;
+import org.apache.pulsar.client.api.ProducerConfiguration;
 import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.impl.PulsarClientImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
+import com.beust.jcommander.ParameterException;
+import com.google.common.util.concurrent.RateLimiter;
+
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 /**
  * LoadSimulationClient is used to simulate client load by maintaining producers and consumers for topics. Instances of
@@ -77,13 +82,16 @@ public class LoadSimulationClient {
     // Pulsar client to create producers and consumers with.
     private final PulsarClient client;
 
+    private final ProducerConfiguration producerConf;
+    private final ConsumerConfiguration consumerConf;
+    private final ClientConfiguration clientConf;
     private final int port;
 
     // A TradeUnit is a Consumer and Producer pair. The rate of message
     // consumption as well as size may be changed at
     // any time, and the TradeUnit may also be stopped.
     private static class TradeUnit {
-        Future<Consumer<byte[]>> consumerFuture;
+        Future<Consumer> consumerFuture;
         final AtomicBoolean stop;
         final RateLimiter rateLimiter;
 
@@ -92,18 +100,17 @@ public class LoadSimulationClient {
         // message size may be sent/changed while reducing object creation, the
         // byte[] is wrapped in an AtomicReference.
         final AtomicReference<byte[]> payload;
+        final ProducerConfiguration producerConf;
         final PulsarClient client;
         final String topic;
         final Map<Integer, byte[]> payloadCache;
 
         public TradeUnit(final TradeConfiguration tradeConf, final PulsarClient client,
+                final ProducerConfiguration producerConf, final ConsumerConfiguration consumerConf,
                 final Map<Integer, byte[]> payloadCache) throws Exception {
-            consumerFuture = client.newConsumer()
-                    .topic(tradeConf.topic)
-                    .subscriptionName("Subscriber-" + tradeConf.topic)
-                    .messageListener(ackListener)
-                    .subscribeAsync();
+            consumerFuture = client.subscribeAsync(tradeConf.topic, "Subscriber-" + tradeConf.topic, consumerConf);
             this.payload = new AtomicReference<>();
+            this.producerConf = producerConf;
             this.payloadCache = payloadCache;
             this.client = client;
             topic = tradeConf.topic;
@@ -124,14 +131,10 @@ public class LoadSimulationClient {
         // Attempt to create a Producer indefinitely. Useful for ensuring
         // messages continue to be sent after broker
         // restarts occur.
-        private Producer<byte[]> getNewProducer() throws Exception {
+        private Producer getNewProducer() throws Exception {
             while (true) {
                 try {
-                    return client.newProducer()
-                                .topic(topic)
-                                .sendTimeout(0, TimeUnit.SECONDS)
-                                .create();
-
+                    return client.createProducer(topic, producerConf);
                 } catch (Exception e) {
                     Thread.sleep(10000);
                 }
@@ -143,8 +146,8 @@ public class LoadSimulationClient {
         }
 
         public void start() throws Exception {
-            Producer<byte[]> producer = getNewProducer();
-            final Consumer<byte[]> consumer = consumerFuture.get();
+            Producer producer = getNewProducer();
+            final Consumer consumer = consumerFuture.get();
             while (!stop.get()) {
                 final MutableBoolean wellnessFlag = new MutableBoolean();
                 final Function<Throwable, ? extends MessageId> exceptionHandler = e -> {
@@ -246,7 +249,7 @@ public class LoadSimulationClient {
         case TRADE_COMMAND:
             // Create the topic. It is assumed that the topic does not already exist.
             decodeProducerOptions(tradeConf, inputStream);
-            final TradeUnit tradeUnit = new TradeUnit(tradeConf, client, payloadCache);
+            final TradeUnit tradeUnit = new TradeUnit(tradeConf, client, producerConf, consumerConf, payloadCache);
             topicsToTradeUnits.put(tradeConf.topic, tradeUnit);
             executor.submit(() -> {
                 try {
@@ -271,9 +274,9 @@ public class LoadSimulationClient {
             // See if a topic belongs to this tenant and group using this regex.
             final String groupRegex = ".*://" + tradeConf.tenant + "/.*/" + tradeConf.group + "-.*/.*";
             for (Map.Entry<String, TradeUnit> entry : topicsToTradeUnits.entrySet()) {
-                final String topic = entry.getKey();
+                final String destination = entry.getKey();
                 final TradeUnit unit = entry.getValue();
-                if (topic.matches(groupRegex)) {
+                if (destination.matches(groupRegex)) {
                     unit.change(tradeConf);
                 }
             }
@@ -284,9 +287,9 @@ public class LoadSimulationClient {
             // See if a topic belongs to this tenant and group using this regex.
             final String regex = ".*://" + tradeConf.tenant + "/.*/" + tradeConf.group + "-.*/.*";
             for (Map.Entry<String, TradeUnit> entry : topicsToTradeUnits.entrySet()) {
-                final String topic = entry.getKey();
+                final String destination = entry.getKey();
                 final TradeUnit unit = entry.getValue();
-                if (topic.matches(regex)) {
+                if (destination.matches(regex)) {
                     unit.stop.set(true);
                 }
             }
@@ -302,7 +305,7 @@ public class LoadSimulationClient {
     }
 
     // Make listener as lightweight as possible.
-    private static final MessageListener<byte[]> ackListener = Consumer::acknowledgeAsync;
+    private static final MessageListener ackListener = Consumer::acknowledgeAsync;
 
     /**
      * Create a LoadSimulationClient with the given JCommander arguments.
@@ -314,15 +317,28 @@ public class LoadSimulationClient {
         payloadCache = new ConcurrentHashMap<>();
         topicsToTradeUnits = new ConcurrentHashMap<>();
 
-        admin = PulsarAdmin.builder()
-                    .serviceHttpUrl(arguments.serviceURL)
-                    .build();
-        client = PulsarClient.builder()
-                    .serviceUrl(arguments.serviceURL)
-                    .connectionsPerBroker(4)
-                    .ioThreads(Runtime.getRuntime().availableProcessors())
-                    .statsInterval(0, TimeUnit.SECONDS)
-                    .build();
+        clientConf = new ClientConfiguration();
+
+        clientConf.setConnectionsPerBroker(4);
+        clientConf.setIoThreads(Runtime.getRuntime().availableProcessors());
+
+        // Disable stats on the clients to reduce CPU/memory usage.
+        clientConf.setStatsInterval(0, TimeUnit.SECONDS);
+
+        producerConf = new ProducerConfiguration();
+
+        // Disable timeout.
+        producerConf.setSendTimeout(0, TimeUnit.SECONDS);
+
+        producerConf.setMessageRoutingMode(ProducerConfiguration.MessageRoutingMode.RoundRobinPartition);
+
+        // Enable batching.
+        producerConf.setBatchingMaxPublishDelay(1, TimeUnit.MILLISECONDS);
+        producerConf.setBatchingEnabled(true);
+        consumerConf = new ConsumerConfiguration();
+        consumerConf.setMessageListener(ackListener);
+        admin = new PulsarAdmin(new URL(arguments.serviceURL), clientConf);
+        client = new PulsarClientImpl(arguments.serviceURL, clientConf);
         port = arguments.port;
         executor = Executors.newCachedThreadPool(new DefaultThreadFactory("test-client"));
     }

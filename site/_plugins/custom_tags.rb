@@ -34,15 +34,7 @@ module Jekyll
       end
 
       if ['persisted', 'persists'].include? @term
-        @term = 'persistent'
-      end
-
-      if @term == 'consume'
-        @term = 'consumer'
-      end
-
-      if ['produce', 'producing'].include? @term
-        @term = 'producer'
+        @term = 'peristent'
       end
 
       if @term == 'multi-tenant'
@@ -103,21 +95,8 @@ module Jekyll
       return "<div class=\"highlighter-rouge endpoint\"><pre class=\"highlight\"><code class=\"method #{@method.downcase}\">#{@method.upcase}</code><code class=\"url\">#{modified_url}</code></pre></div>"
     end
   end
-
-  class ImgTag < Liquid::Tag
-    def initialize(tag_name, markup, tokens)
-      args = markup.split(" ")
-      @url = args[0]
-      @width = args[1]
-    end
-
-    def render(context)
-      return "<img src=\"#{@url}\" width=\"#{@width}%\">"
-    end
-  end
 end
 
 Liquid::Template.register_tag('popover', Jekyll::RenderPopover)
 Liquid::Template.register_tag('javadoc', Jekyll::JavadocUrl)
 Liquid::Template.register_tag('endpoint', Jekyll::RenderEndpointTag)
-Liquid::Template.register_tag('img', Jekyll::ImgTag)

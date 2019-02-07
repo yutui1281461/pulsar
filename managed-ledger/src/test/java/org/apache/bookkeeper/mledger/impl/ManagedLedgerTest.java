@@ -18,12 +18,6 @@
  */
 package org.apache.bookkeeper.mledger.impl;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyInt;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
@@ -35,40 +29,20 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.nio.charset.Charset;
-import java.security.GeneralSecurityException;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 
-import org.apache.bookkeeper.client.AsyncCallback.AddCallback;
-import org.apache.bookkeeper.client.AsyncCallback.CreateCallback;
 import org.apache.bookkeeper.client.BKException;
-import org.apache.bookkeeper.client.BookKeeper;
-import org.apache.bookkeeper.client.BookKeeper.DigestType;
-import org.apache.bookkeeper.client.LedgerHandle;
-import org.apache.bookkeeper.client.api.LedgerEntries;
-import org.apache.bookkeeper.client.api.ReadHandle;
-import org.apache.bookkeeper.client.LedgerMetadata;
-import org.apache.bookkeeper.client.PulsarMockBookKeeper;
-import org.apache.bookkeeper.client.PulsarMockLedgerHandle;
-import org.apache.bookkeeper.client.api.LedgerEntries;
-import org.apache.bookkeeper.client.api.ReadHandle;
-import org.apache.bookkeeper.client.api.WriteFlag;
-import org.apache.bookkeeper.conf.ClientConfiguration;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.AddEntryCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.CloseCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.DeleteLedgerCallback;
@@ -76,7 +50,6 @@ import org.apache.bookkeeper.mledger.AsyncCallbacks.MarkDeleteCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.OpenCursorCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.OpenLedgerCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.ReadEntriesCallback;
-import org.apache.bookkeeper.mledger.AsyncCallbacks.ReadEntryCallback;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedCursor;
 import org.apache.bookkeeper.mledger.ManagedCursor.IndividualDeletedEntries;
@@ -84,18 +57,17 @@ import org.apache.bookkeeper.mledger.ManagedLedger;
 import org.apache.bookkeeper.mledger.ManagedLedgerConfig;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
 import org.apache.bookkeeper.mledger.ManagedLedgerException.ManagedLedgerFencedException;
-import org.apache.bookkeeper.mledger.ManagedLedgerException.ManagedLedgerNotFoundException;
 import org.apache.bookkeeper.mledger.ManagedLedgerException.MetaStoreException;
 import org.apache.bookkeeper.mledger.ManagedLedgerFactory;
 import org.apache.bookkeeper.mledger.Position;
 import org.apache.bookkeeper.mledger.impl.MetaStore.MetaStoreCallback;
 import org.apache.bookkeeper.mledger.impl.MetaStore.Stat;
+import org.apache.bookkeeper.mledger.impl.MetaStoreImplZookeeper.ZNodeProtobufFormat;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.ManagedLedgerInfo;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.ManagedLedgerInfo.LedgerInfo;
+import org.apache.bookkeeper.mledger.util.Pair;
 import org.apache.bookkeeper.test.MockedBookKeeperTestCase;
-import org.apache.commons.lang3.tuple.Pair;
-import org.apache.pulsar.common.api.ByteBufPair;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandSubscribe.InitialPosition;
+import org.apache.pulsar.common.api.DoubleByteBuf;
 import org.apache.pulsar.common.api.proto.PulsarApi.MessageMetadata;
 import org.apache.pulsar.common.util.protobuf.ByteBufCodedOutputStream;
 import org.apache.zookeeper.CreateMode;
@@ -104,6 +76,7 @@ import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testng.annotations.Factory;
 import org.testng.annotations.Test;
 
 import com.google.common.base.Charsets;
@@ -118,6 +91,12 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
     private static final Logger log = LoggerFactory.getLogger(ManagedLedgerTest.class);
 
     private static final Charset Encoding = Charsets.UTF_8;
+
+    @Factory(dataProvider = "protobufFormat")
+    public ManagedLedgerTest(ZNodeProtobufFormat protobufFormat) {
+        super();
+        this.protobufFormat = protobufFormat;
+    }
 
     @Test
     public void managedLedgerApi() throws Exception {
@@ -139,7 +118,7 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
             // Acknowledge only on last entry
             Entry lastEntry = entries.get(entries.size() - 1);
             cursor.markDelete(lastEntry.getPosition());
-
+            
             for (Entry entry : entries) {
                 log.info("Read entry. Position={} Content='{}'", entry.getPosition(), new String(entry.getData()));
                 entry.release();
@@ -289,8 +268,8 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
                             public void addComplete(Position position, Object ctx) {
                                 @SuppressWarnings("unchecked")
                                 Pair<ManagedLedger, ManagedCursor> pair = (Pair<ManagedLedger, ManagedCursor>) ctx;
-                                ManagedLedger ledger = pair.getLeft();
-                                ManagedCursor cursor = pair.getRight();
+                                ManagedLedger ledger = pair.first;
+                                ManagedCursor cursor = pair.second;
 
                                 assertEquals(ledger.getNumberOfEntries(), 1);
                                 assertEquals(ledger.getTotalSize(), "test".getBytes(Encoding).length);
@@ -335,7 +314,7 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
                             public void addFailed(ManagedLedgerException exception, Object ctx) {
                                 fail(exception.getMessage());
                             }
-                        }, Pair.of(ledger, cursor));
+                        }, new Pair<ManagedLedger, ManagedCursor>(ledger, cursor));
                     }
 
                     @Override
@@ -1496,7 +1475,7 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
         // from the list of ledgers
         final CountDownLatch counter = new CountDownLatch(1);
         final MetaStore store = factory.getMetaStore();
-        store.getManagedLedgerInfo("my_test_ledger", false, new MetaStoreCallback<ManagedLedgerInfo>() {
+        store.getManagedLedgerInfo("my_test_ledger", new MetaStoreCallback<ManagedLedgerInfo>() {
             @Override
             public void operationComplete(ManagedLedgerInfo result, Stat version) {
                 // Update the list
@@ -1697,35 +1676,11 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
         c1.skipEntries(1, IndividualDeletedEntries.Exclude);
         // let retention expire
         Thread.sleep(1000);
-        ml.internalTrimConsumedLedgers(CompletableFuture.completedFuture(null));
-
+        ml.close();
+        // sleep for trim
+        Thread.sleep(100);
         assertTrue(ml.getLedgersInfoAsList().size() <= 1);
         assertTrue(ml.getTotalSize() <= "shortmessage".getBytes().length);
-        ml.close();
-    }
-
-    @Test
-    public void testInfiniteRetention() throws Exception {
-        ManagedLedgerFactory factory = new ManagedLedgerFactoryImpl(bkc, bkc.getZkHandle());
-        ManagedLedgerConfig config = new ManagedLedgerConfig();
-        config.setRetentionSizeInMB(-1);
-        config.setRetentionTime(-1, TimeUnit.HOURS);
-        config.setMaxEntriesPerLedger(1);
-
-        ManagedLedgerImpl ml = (ManagedLedgerImpl) factory.open("retention_test_ledger", config);
-        ManagedCursor c1 = ml.openCursor("c1");
-        ml.addEntry("iamaverylongmessagethatshouldberetained".getBytes());
-        c1.skipEntries(1, IndividualDeletedEntries.Exclude);
-        ml.close();
-
-        // reopen ml
-        ml = (ManagedLedgerImpl) factory.open("retention_test_ledger", config);
-        c1 = ml.openCursor("c1");
-        ml.addEntry("shortmessage".getBytes());
-        c1.skipEntries(1, IndividualDeletedEntries.Exclude);
-        ml.close();
-        assertTrue(ml.getLedgersInfoAsList().size() > 1);
-        assertTrue(ml.getTotalSize() > "shortmessage".getBytes().length);
     }
 
     @Test
@@ -1792,7 +1747,7 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
         CountDownLatch l1 = new CountDownLatch(1);
 
         // obtain the ledger info
-        store.getManagedLedgerInfo("backward_test_ledger", false, new MetaStoreCallback<ManagedLedgerInfo>() {
+        store.getManagedLedgerInfo("backward_test_ledger", new MetaStoreCallback<ManagedLedgerInfo>() {
             @Override
             public void operationComplete(ManagedLedgerInfo result, Stat version) {
                 storedMLInfo[0] = result;
@@ -2186,224 +2141,7 @@ public class ManagedLedgerTest extends MockedBookKeeperTestCase {
         headers.writeInt(msgMetadataSize);
         messageData.writeTo(outStream);
         outStream.recycle();
-        return ByteBufPair.coalesce(ByteBufPair.get(headers, payload));
+        return DoubleByteBuf.get(headers, payload);
     }
 
-    @Test
-    public void testConsumerSubscriptionInitializePosition() throws Exception{
-        final int MAX_ENTRY_PER_LEDGER = 2;
-        ManagedLedgerConfig config = new ManagedLedgerConfig().setMaxEntriesPerLedger(MAX_ENTRY_PER_LEDGER);
-        ManagedLedgerImpl ledger = (ManagedLedgerImpl) factory.open("lastest_earliest_ledger", config);
-
-        final int totalInsertedEntries = 20;
-        for (int i = 0; i < totalInsertedEntries; i++) {
-            String content = "entry" + i; // 5 bytes
-            ledger.addEntry(content.getBytes());
-        }
-        // Open Cursor also adds cursor into activeCursor-container
-        ManagedCursor latestCursor = ledger.openCursor("c1", InitialPosition.Latest);
-        ManagedCursor earliestCursor = ledger.openCursor("c2", InitialPosition.Earliest);
-
-        // Since getReadPosition returns the next position, we decrease the entryId by 1
-        PositionImpl p1 = (PositionImpl) latestCursor.getReadPosition();
-        PositionImpl p2 = (PositionImpl) earliestCursor.getReadPosition();
-
-        Pair<PositionImpl, Long> latestPositionAndCounter = ledger.getLastPositionAndCounter();
-        Pair<PositionImpl, Long> earliestPositionAndCounter = ledger.getFirstPositionAndCounter();
-
-        assertEquals(latestPositionAndCounter.getLeft().getNext(), p1);
-        assertEquals(earliestPositionAndCounter.getLeft().getNext(), p2);
-
-        assertEquals(latestPositionAndCounter.getRight().longValue(), totalInsertedEntries);
-        assertEquals(earliestPositionAndCounter.getRight().longValue(), totalInsertedEntries - earliestCursor.getNumberOfEntriesInBacklog());
-
-        ledger.close();
-
-    }
-
-    @Test
-    public void testManagedLedgerAutoCreate() throws Exception {
-        ManagedLedgerConfig config = new ManagedLedgerConfig().setCreateIfMissing(true);
-        ManagedLedgerImpl ledger = (ManagedLedgerImpl) factory.open("test", config);
-        assertNotNull(ledger);
-    }
-
-    @Test
-    public void testManagedLedgerWithoutAutoCreate() throws Exception {
-        ManagedLedgerConfig config = new ManagedLedgerConfig().setCreateIfMissing(false);
-
-        try {
-            factory.open("testManagedLedgerWithoutAutoCreate", config);
-            fail("should have thrown ManagedLedgerNotFoundException");
-        } catch (ManagedLedgerNotFoundException e) {
-            // Expected
-        }
-
-        assertFalse(factory.getManagedLedgers().containsKey("testManagedLedgerWithoutAutoCreate"));
-    }
-    
-    @Test
-    public void testManagedLedgerWithCreateLedgerTimeOut() throws Exception {
-        ManagedLedgerConfig config = new ManagedLedgerConfig().setMetadataOperationsTimeoutSeconds(3);
-        ManagedLedgerImpl ledger = (ManagedLedgerImpl) factory.open("timeout_ledger_test", config);
-        
-        BookKeeper bk = mock(BookKeeper.class);
-        doNothing().when(bk).asyncCreateLedger(anyInt(), anyInt(), anyInt(), any(), any(), any(), any(), any());
-        AtomicInteger response = new AtomicInteger(0);
-        CountDownLatch latch = new CountDownLatch(1);
-        ledger.asyncCreateLedger(bk, config, null, new CreateCallback() {
-            @Override
-            public void createComplete(int rc, LedgerHandle lh, Object ctx) {
-                response.set(rc);
-                latch.countDown();
-            }
-        }, Collections.emptyMap());
-
-        latch.await(config.getMetadataOperationsTimeoutSeconds() + 2, TimeUnit.SECONDS);
-        assertEquals(response.get(), BKException.Code.TimeoutException);
-        
-        ledger.close();
-    }
-    
-    /**
-     * It verifies that asyncRead timesout if it doesn't receive response from bk-client in configured timeout
-     * 
-     * @throws Exception
-     */
-    @Test
-    public void testManagedLedgerWithReadEntryTimeOut() throws Exception {
-        ManagedLedgerConfig config = new ManagedLedgerConfig().setReadEntryTimeoutSeconds(1);
-        ManagedLedgerImpl ledger = (ManagedLedgerImpl) factory.open("timeout_ledger_test", config);
-
-        BookKeeper bk = mock(BookKeeper.class);
-        doNothing().when(bk).asyncCreateLedger(anyInt(), anyInt(), anyInt(), any(), any(), any(), any(), any());
-        AtomicReference<ManagedLedgerException> responseException1 = new AtomicReference<>();
-        CountDownLatch latch1 = new CountDownLatch(1);
-
-        CompletableFuture<LedgerEntries> entriesFuture = new CompletableFuture<>();
-        ReadHandle ledgerHandle = mock(ReadHandle.class);
-        doReturn(entriesFuture).when(ledgerHandle).readAsync(PositionImpl.earliest.getLedgerId(),
-                PositionImpl.earliest.getEntryId());
-
-        // (1) test read-timeout for: ManagedLedger.asyncReadEntry(..)
-        ledger.asyncReadEntry(ledgerHandle, PositionImpl.earliest, new ReadEntryCallback() {
-            @Override
-            public void readEntryComplete(Entry entry, Object ctx) {
-                responseException1.set(null);
-                latch1.countDown();
-            }
-
-            @Override
-            public void readEntryFailed(ManagedLedgerException exception, Object ctx) {
-                responseException1.set(exception);
-                latch1.countDown();
-            }
-        }, null);
-        ledger.asyncCreateLedger(bk, config, null, new CreateCallback() {
-            @Override
-            public void createComplete(int rc, LedgerHandle lh, Object ctx) {
-
-            }
-        }, Collections.emptyMap());
-        latch1.await(config.getReadEntryTimeoutSeconds() + 2, TimeUnit.SECONDS);
-        assertNotNull(responseException1.get());
-        assertEquals(responseException1.get().getMessage(), BKException.getMessage(BKException.Code.TimeoutException));
-
-        // (2) test read-timeout for: ManagedLedger.asyncReadEntry(..)
-        CountDownLatch latch2 = new CountDownLatch(1);
-        AtomicReference<ManagedLedgerException> responseException2 = new AtomicReference<>();
-        PositionImpl readPositionRef = PositionImpl.earliest;
-        ManagedCursorImpl cursor = new ManagedCursorImpl(bk, config, ledger, "cursor1");
-        OpReadEntry opReadEntry = OpReadEntry.create(cursor, readPositionRef, 1, new ReadEntriesCallback() {
-
-            @Override
-            public void readEntriesComplete(List<Entry> entries, Object ctx) {
-                latch2.countDown();
-            }
-
-            @Override
-            public void readEntriesFailed(ManagedLedgerException exception, Object ctx) {
-                responseException2.set(exception);
-                latch2.countDown();
-            }
-
-        }, null);
-        ledger.asyncReadEntry(ledgerHandle, PositionImpl.earliest.getEntryId(), PositionImpl.earliest.getEntryId(),
-                false, opReadEntry, null);
-        latch2.await(config.getReadEntryTimeoutSeconds() + 2, TimeUnit.SECONDS);
-        assertNotNull(responseException2.get());
-        assertEquals(responseException2.get().getMessage(), BKException.getMessage(BKException.Code.TimeoutException));
-
-        ledger.close();
-    }
-
-    /**
-     * It verifies that if bk-client doesn't complete the add-entry in given time out then broker is resilient enought
-     * to create new ledger and add entry successfully.
-     * 
-     * 
-     * @throws Exception
-     */
-    @Test(timeOut = 20000)
-    public void testManagedLedgerWithAddEntryTimeOut() throws Exception {
-        ManagedLedgerConfig config = new ManagedLedgerConfig().setAddEntryTimeoutSeconds(1);
-        ManagedLedgerImpl ledger = (ManagedLedgerImpl) factory.open("timeout_ledger_test", config);
-
-        BookKeeper bk = mock(BookKeeper.class);
-        doNothing().when(bk).asyncCreateLedger(anyInt(), anyInt(), anyInt(), any(), any(), any(), any(), any());
-
-        PulsarMockBookKeeper bkClient = mock(PulsarMockBookKeeper.class);
-        ClientConfiguration conf = new ClientConfiguration();
-        doReturn(conf).when(bkClient).getConf();
-        class MockLedgerHandle extends PulsarMockLedgerHandle {
-            public MockLedgerHandle(PulsarMockBookKeeper bk, long id, DigestType digest, byte[] passwd)
-                    throws GeneralSecurityException {
-                super(bk, id, digest, passwd);
-            }
-
-            @Override
-            public void asyncAddEntry(final byte[] data, final AddCallback cb, final Object ctx) {
-                // do nothing
-            }
-
-            @Override
-            public void asyncClose(org.apache.bookkeeper.client.AsyncCallback.CloseCallback cb, Object ctx) {
-                cb.closeComplete(BKException.Code.OK, this, ctx);
-            }
-        }
-        MockLedgerHandle ledgerHandle = mock(MockLedgerHandle.class);
-        final String data = "data";
-        doNothing().when(ledgerHandle).asyncAddEntry(data.getBytes(), null, null);
-        AtomicBoolean addSuccess = new AtomicBoolean();
-
-        setFieldValue(ManagedLedgerImpl.class, ledger, "currentLedger", ledgerHandle);
-
-        final int totalAddEntries = 1;
-        CountDownLatch latch = new CountDownLatch(totalAddEntries);
-        ledger.asyncAddEntry(data.getBytes(), new AddEntryCallback() {
-
-            @Override
-            public void addComplete(Position position, Object ctx) {
-                addSuccess.set(true);
-                latch.countDown();
-            }
-
-            @Override
-            public void addFailed(ManagedLedgerException exception, Object ctx) {
-                latch.countDown();
-            }
-        }, null);
-
-        latch.await();
-
-        assertTrue(addSuccess.get());
-
-        setFieldValue(ManagedLedgerImpl.class, ledger, "currentLedger", null);
-    }
-
-    private void setFieldValue(Class clazz, Object classObj, String fieldName, Object fieldValue) throws Exception {
-        Field field = clazz.getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(classObj, fieldValue);
-    }
 }

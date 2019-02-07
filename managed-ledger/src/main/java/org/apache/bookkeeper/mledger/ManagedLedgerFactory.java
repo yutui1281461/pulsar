@@ -18,10 +18,10 @@
  */
 package org.apache.bookkeeper.mledger;
 
-import com.google.common.annotations.Beta;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.ManagedLedgerInfoCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.OpenLedgerCallback;
-import org.apache.bookkeeper.mledger.AsyncCallbacks.OpenReadOnlyCursorCallback;
+
+import com.google.common.annotations.Beta;
 
 /**
  * A factory to open/create managed ledgers and delete them.
@@ -39,7 +39,7 @@ public interface ManagedLedgerFactory {
      * @return the managed ledger
      * @throws ManagedLedgerException
      */
-    ManagedLedger open(String name) throws InterruptedException, ManagedLedgerException;
+    public ManagedLedger open(String name) throws InterruptedException, ManagedLedgerException;
 
     /**
      * Open a managed ledger. If the managed ledger does not exist, a new one will be automatically created.
@@ -51,7 +51,7 @@ public interface ManagedLedgerFactory {
      * @return the managed ledger
      * @throws ManagedLedgerException
      */
-    ManagedLedger open(String name, ManagedLedgerConfig config)
+    public ManagedLedger open(String name, ManagedLedgerConfig config)
             throws InterruptedException, ManagedLedgerException;
 
     /**
@@ -65,7 +65,7 @@ public interface ManagedLedgerFactory {
      * @param ctx
      *            opaque context
      */
-    void asyncOpen(String name, OpenLedgerCallback callback, Object ctx);
+    public void asyncOpen(String name, OpenLedgerCallback callback, Object ctx);
 
     /**
      * Asynchronous open method.
@@ -80,43 +80,10 @@ public interface ManagedLedgerFactory {
      * @param ctx
      *            opaque context
      */
-    void asyncOpen(String name, ManagedLedgerConfig config, OpenLedgerCallback callback, Object ctx);
+    public void asyncOpen(String name, ManagedLedgerConfig config, OpenLedgerCallback callback, Object ctx);
 
     /**
-     * Open a {@link ReadOnlyCursor} positioned to the earliest entry for the specified managed ledger
-     *
-     * @param managedLedgerName
-     * @param startPosition
-     *            set the cursor on that particular position. If setting to `PositionImpl.earliest` it will be
-     *            positioned on the first available entry.
-     * @return
-     */
-    ReadOnlyCursor openReadOnlyCursor(String managedLedgerName, Position startPosition, ManagedLedgerConfig config)
-            throws InterruptedException, ManagedLedgerException;
-
-    /**
-     * Open a {@link ReadOnlyCursor} positioned to the earliest entry for the specified managed ledger
-     *
-     * @param name
-     * @param startPosition
-     *            set the cursor on that particular position. If setting to `PositionImpl.earliest` it will be
-     *            positioned on the first available entry.
-     * @param callback
-     * @param ctx
-     */
-    void asyncOpenReadOnlyCursor(String managedLedgerName, Position startPosition, ManagedLedgerConfig config,
-            OpenReadOnlyCursorCallback callback, Object ctx);
-
-    /**
-     * Get the current metadata info for a managed ledger.
-     *
-     * @param name
-     *            the unique name that identifies the managed ledger
-     */
-    ManagedLedgerInfo getManagedLedgerInfo(String name) throws InterruptedException, ManagedLedgerException;
-
-    /**
-     * Asynchronously get the current metadata info for a managed ledger.
+     * Get the current metadata info for a managed ledger
      *
      * @param name
      *            the unique name that identifies the managed ledger
@@ -125,13 +92,25 @@ public interface ManagedLedgerFactory {
      * @param ctx
      *            opaque context
      */
-    void asyncGetManagedLedgerInfo(String name, ManagedLedgerInfoCallback callback, Object ctx);
+    public ManagedLedgerInfo getManagedLedgerInfo(String name) throws InterruptedException, ManagedLedgerException;
 
     /**
-     * Releases all the resources maintained by the ManagedLedgerFactory.
+     * Asynchronously get the current metadata info for a managed ledger
+     *
+     * @param name
+     *            the unique name that identifies the managed ledger
+     * @param callback
+     *            callback object
+     * @param ctx
+     *            opaque context
+     */
+    public void asyncGetManagedLedgerInfo(String name, ManagedLedgerInfoCallback callback, Object ctx);
+
+    /**
+     * Releases all the resources maintained by the ManagedLedgerFactory
      *
      * @throws ManagedLedgerException
      */
-    void shutdown() throws InterruptedException, ManagedLedgerException;
+    public void shutdown() throws InterruptedException, ManagedLedgerException;
 
 }

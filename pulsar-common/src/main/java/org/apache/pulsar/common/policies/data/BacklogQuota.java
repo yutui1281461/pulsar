@@ -18,9 +18,7 @@
  */
 package org.apache.pulsar.common.policies.data;
 
-import java.util.Objects;
-
-import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 
 /**
  * Unit of a backlog quota configuration for a scoped resource in a Pulsar instance.
@@ -69,19 +67,19 @@ public class BacklogQuota {
 
     @Override
     public int hashCode() {
-        return Objects.hash(Long.valueOf(limit), policy);
+        return Objects.hashCode(Long.valueOf(limit), policy);
     }
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this).add("limit", limit).add("policy", policy).toString();
+        return Objects.toStringHelper(this).add("limit", limit).add("policy", policy).toString();
     }
 
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof BacklogQuota) {
             BacklogQuota other = (BacklogQuota) obj;
-            return Objects.equals(limit, other.limit) && Objects.equals(policy, other.policy);
+            return Objects.equal(limit, other.limit) && Objects.equal(policy, other.policy);
         }
         return false;
     };

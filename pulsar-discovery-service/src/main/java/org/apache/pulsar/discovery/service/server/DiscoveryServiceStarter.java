@@ -19,13 +19,11 @@
 package org.apache.pulsar.discovery.service.server;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.Thread.setDefaultUncaughtExceptionHandler;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 import static org.slf4j.bridge.SLF4JBridgeHandler.install;
 import static org.slf4j.bridge.SLF4JBridgeHandler.removeHandlersForRootLogger;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -42,30 +40,24 @@ import org.slf4j.LoggerFactory;
  */
 public class DiscoveryServiceStarter {
 
-    public static void checkConfig(ServiceConfig config) {
-        checkArgument(!isEmpty(config.getZookeeperServers()), "zookeeperServers must be provided");
-        checkArgument(!isEmpty(config.getConfigurationStoreServers()),  "configuration-store Servers must be provided");
-    }
-
     public static void init(String configFile) throws Exception {
         // setup handlers
         removeHandlersForRootLogger();
         install();
-
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss,SSS");
-        Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> {
-            System.out.println(String.format("%s [%s] error Uncaught exception in thread %s: %s", dateFormat.format(new Date()), thread.getContextClassLoader(), thread.getName(), exception.getMessage()));
+        setDefaultUncaughtExceptionHandler((thread, exception) -> {
+            log.error("Uncaught exception in thread {}: {}", thread.getName(), exception.getMessage(), exception);
         });
 
         // load config file
         final ServiceConfig config = PulsarConfigurationLoader.create(configFile, ServiceConfig.class);
-        checkConfig(config);
-
-        // create Discovery service
+        checkArgument(!isEmpty(config.getZookeeperServers()), "zookeeperServers must be provided");
+        checkArgument(!isEmpty(config.getGlobalZookeeperServers()), "global-zookeeperServers must be provided");
+        
+        // create broker service
         DiscoveryService discoveryService = new DiscoveryService(config);
         // create a web-service
         final ServerManager server = new ServerManager(config);
-
+        
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
             public void run() {
@@ -77,7 +69,7 @@ public class DiscoveryServiceStarter {
                 }
             }
         });
-
+        
         discoveryService.start();
         startWebService(server, config);
     }

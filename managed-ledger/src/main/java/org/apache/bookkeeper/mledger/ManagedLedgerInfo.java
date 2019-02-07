@@ -21,9 +21,8 @@ package org.apache.bookkeeper.mledger;
 import java.util.List;
 import java.util.Map;
 
-@SuppressWarnings("checkstyle:javadoctype")
 public class ManagedLedgerInfo {
-    /** Z-Node version. */
+    /** Z-Node version */
     public int version;
     public String creationDate;
     public String modificationDate;
@@ -41,7 +40,7 @@ public class ManagedLedgerInfo {
     }
 
     public static class CursorInfo {
-        /** Z-Node version. */
+        /** Z-Node version */
         public int version;
         public String creationDate;
         public String modificationDate;
@@ -53,7 +52,6 @@ public class ManagedLedgerInfo {
         // Last snapshot of the mark-delete position
         public PositionInfo markDelete;
         public List<MessageRangeInfo> individualDeletedMessages;
-        public Map<String, Long> properties;
     }
 
     public static class PositionInfo {

@@ -18,10 +18,10 @@
  */
 package org.apache.pulsar.common.util;
 
+import org.apache.pulsar.common.policies.data.AuthAction;
+
 import static com.google.common.base.Preconditions.checkNotNull;
 import static java.lang.String.format;
-
-import com.fasterxml.jackson.databind.util.EnumResolver;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -32,10 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import org.apache.commons.lang3.StringUtils;
-
-import io.netty.util.internal.StringUtil;
 
 /**
  *
@@ -94,17 +90,6 @@ public final class FieldParser {
         // Lookup the suitable converter.
         String converterId = from.getClass().getName() + "_" + to.getName();
         Method converter = CONVERTERS.get(converterId);
-
-        if (to.isEnum()) {
-            // Converting string to enum
-            EnumResolver r = EnumResolver.constructUsingToString((Class<Enum<?>>) to, null);
-            T value = (T) r.findEnum((String) from);
-            if (value == null) {
-                throw new RuntimeException("Invalid value '" + from + "' for enum " + to);
-            }
-            return value;
-        }
-
         if (converter == null) {
             throw new UnsupportedOperationException("Cannot convert from " + from.getClass().getName() + " to "
                     + to.getName() + ". Requested converter does not exist.");
@@ -136,10 +121,7 @@ public final class FieldParser {
             if (properties.containsKey(f.getName())) {
                 try {
                     f.setAccessible(true);
-                    String v = (String) properties.get(f.getName());
-                    if (!StringUtils.isBlank(v)) {
-                        f.set(obj, value(v, f));
-                    }
+                    f.set(obj, value((String) properties.get(f.getName()), f));
                 } catch (Exception e) {
                     throw new IllegalArgumentException(format("failed to initialize %s field while setting value %s",
                             f.getName(), properties.get(f.getName())), e);
@@ -210,12 +192,7 @@ public final class FieldParser {
      * @return The converted Integer value.
      */
     public static Integer stringToInteger(String val) {
-        String v = trim(val);
-        if (StringUtil.isNullOrEmpty(v)) {
-            return null;
-        } else {
-            return Integer.valueOf(v);
-        }
+        return Integer.valueOf(trim(val));
     }
 
     /**
@@ -237,12 +214,7 @@ public final class FieldParser {
      * @return The converted Double value.
      */
     public static Double stringToDouble(String val) {
-        String v = trim(val);
-        if (StringUtil.isNullOrEmpty(v)) {
-            return null;
-        } else {
-            return Double.valueOf(v);
-        }
+        return Double.valueOf(trim(val));
     }
 
     /**

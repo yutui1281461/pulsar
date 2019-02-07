@@ -19,25 +19,23 @@
 #ifndef _PULSAR_EXECUTOR_SERVICE_HEADER_
 #define _PULSAR_EXECUTOR_SERVICE_HEADER_
 
-#include <memory>
+#include <boost/scoped_ptr.hpp>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
-#include <functional>
-#include <thread>
+#include <boost/function.hpp>
 #include <boost/noncopyable.hpp>
-#include <mutex>
+#include <boost/thread/mutex.hpp>
 
 #pragma GCC visibility push(default)
 
 namespace pulsar {
-typedef std::shared_ptr<boost::asio::ip::tcp::socket> SocketPtr;
-typedef std::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket &> > TlsSocketPtr;
-typedef std::shared_ptr<boost::asio::ip::tcp::resolver> TcpResolverPtr;
-typedef std::shared_ptr<boost::asio::deadline_timer> DeadlineTimerPtr;
+typedef boost::shared_ptr<boost::asio::ip::tcp::socket> SocketPtr;
+typedef boost::shared_ptr<boost::asio::ssl::stream<boost::asio::ip::tcp::socket&> > TlsSocketPtr;
+typedef boost::shared_ptr<boost::asio::ip::tcp::resolver> TcpResolverPtr;
+typedef boost::shared_ptr<boost::asio::deadline_timer> DeadlineTimerPtr;
 class ExecutorService : private boost::noncopyable {
-    friend class ClientConnection;
-
-   public:
+ friend class ClientConnection;
+ public:
     ExecutorService();
     ~ExecutorService();
 
@@ -45,10 +43,10 @@ class ExecutorService : private boost::noncopyable {
     TlsSocketPtr createTlsSocket(SocketPtr &socket, boost::asio::ssl::context &ctx);
     TcpResolverPtr createTcpResolver();
     DeadlineTimerPtr createDeadlineTimer();
-    void postWork(std::function<void(void)> task);
+    void postWork(boost::function<void(void)> task);
     void close();
+ private:
 
-   private:
     /*
      *  only called once and within lock so no need to worry about thread-safety
      */
@@ -64,7 +62,7 @@ class ExecutorService : private boost::noncopyable {
      * it will keep it running in the background so we don't have to take care of it
      */
     typedef boost::asio::io_service::work BackgroundWork;
-    std::unique_ptr<BackgroundWork> work_;
+    boost::scoped_ptr<BackgroundWork> work_;
 
     /*
      * worker thread which runs until work object is destroyed, it's running io_service::run in
@@ -74,27 +72,28 @@ class ExecutorService : private boost::noncopyable {
     boost::asio::detail::thread worker_;
 };
 
-typedef std::shared_ptr<ExecutorService> ExecutorServicePtr;
+typedef boost::shared_ptr<ExecutorService> ExecutorServicePtr;
 
 class ExecutorServiceProvider {
-   public:
+ public:
     explicit ExecutorServiceProvider(int nthreads);
 
     ExecutorServicePtr get();
 
     void close();
 
-   private:
+ private:
     typedef std::vector<ExecutorServicePtr> ExecutorList;
     ExecutorList executors_;
     int executorIdx_;
-    std::mutex mutex_;
-    typedef std::unique_lock<std::mutex> Lock;
+    boost::mutex mutex_;
+    typedef boost::unique_lock<boost::mutex> Lock;
 };
 
-typedef std::shared_ptr<ExecutorServiceProvider> ExecutorServiceProviderPtr;
-}  // namespace pulsar
+typedef boost::shared_ptr<ExecutorServiceProvider> ExecutorServiceProviderPtr;
+
+}
 
 #pragma GCC visibility pop
 
-#endif  //_PULSAR_EXECUTOR_SERVICE_HEADER_
+#endif //_PULSAR_EXECUTOR_SERVICE_HEADER_

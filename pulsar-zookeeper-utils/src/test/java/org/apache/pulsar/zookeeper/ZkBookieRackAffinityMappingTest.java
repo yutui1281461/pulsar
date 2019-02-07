@@ -24,14 +24,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.bookkeeper.client.RackawareEnsemblePlacementPolicy;
 import org.apache.bookkeeper.conf.ClientConfiguration;
 import org.apache.bookkeeper.net.BookieSocketAddress;
 import org.apache.bookkeeper.net.NetworkTopology;
 import org.apache.bookkeeper.test.PortManager;
 import org.apache.bookkeeper.util.ZkUtils;
-import org.apache.bookkeeper.zookeeper.ZooKeeperClient;
-import org.apache.pulsar.common.policies.data.BookieInfo;
+import org.apache.bookkeeper.zookeeper.ZooKeeperWatcherBase;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
+import org.apache.pulsar.zookeeper.BookieInfo;
+import org.apache.pulsar.zookeeper.ZkBookieRackAffinityMapping;
+import org.apache.pulsar.zookeeper.ZooKeeperCache;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.ZooDefs;
 import org.apache.zookeeper.ZooKeeper;
@@ -57,7 +60,8 @@ public class ZkBookieRackAffinityMappingTest {
     public void setUp() throws Exception {
         localZkS = new ZookeeperServerTest(LOCAL_ZOOKEEPER_PORT);
         localZkS.start();
-        localZkc = ZooKeeperClient.newBuilder().connectString("127.0.0.1:" + LOCAL_ZOOKEEPER_PORT).build();
+        ZooKeeperWatcherBase zkWatcherBase = new ZooKeeperWatcherBase(10000);
+        localZkc = ZkUtils.createConnectedZookeeperClient("127.0.0.1" + ":" + LOCAL_ZOOKEEPER_PORT, zkWatcherBase);
         BOOKIE1 = new BookieSocketAddress("127.0.0.1:3181");
         BOOKIE2 = new BookieSocketAddress("127.0.0.2:3181");
         BOOKIE3 = new BookieSocketAddress("127.0.0.3:3181");
@@ -82,8 +86,7 @@ public class ZkBookieRackAffinityMappingTest {
         bkClientConf1.setProperty(ZooKeeperCache.ZK_CACHE_INSTANCE, new ZooKeeperCache(localZkc) {
         });
         mapping1.setConf(bkClientConf1);
-        List<String> racks1 = mapping1
-                .resolve(Lists.newArrayList(BOOKIE1.getHostName(), BOOKIE2.getHostName(), BOOKIE3.getHostName()));
+        List<String> racks1 = mapping1.resolve(Lists.newArrayList(BOOKIE1, BOOKIE2, BOOKIE3));
         assertEquals(racks1.get(0), "/rack0");
         assertEquals(racks1.get(1), "/rack1");
         assertEquals(racks1.get(2), NetworkTopology.DEFAULT_RACK);
@@ -95,8 +98,7 @@ public class ZkBookieRackAffinityMappingTest {
         bkClientConf2.setZkServers("127.0.0.1" + ":" + LOCAL_ZOOKEEPER_PORT);
         bkClientConf2.setZkTimeout(1000);
         mapping2.setConf(bkClientConf2);
-        List<String> racks2 = mapping2
-                .resolve(Lists.newArrayList(BOOKIE1.getHostName(), BOOKIE2.getHostName(), BOOKIE3.getHostName()));
+        List<String> racks2 = mapping2.resolve(Lists.newArrayList(BOOKIE1, BOOKIE2, BOOKIE3));
         assertEquals(racks2.get(0), "/rack0");
         assertEquals(racks2.get(1), "/rack1");
         assertEquals(racks2.get(2), NetworkTopology.DEFAULT_RACK);
@@ -111,7 +113,7 @@ public class ZkBookieRackAffinityMappingTest {
         bkClientConf.setProperty(ZooKeeperCache.ZK_CACHE_INSTANCE, new ZooKeeperCache(localZkc) {
         });
         mapping.setConf(bkClientConf);
-        List<String> racks = mapping.resolve(Lists.newArrayList("127.0.0.1", "127.0.0.2", "127.0.0.3"));
+        List<String> racks = mapping.resolve(Lists.newArrayList(BOOKIE1, BOOKIE2, BOOKIE3));
         assertEquals(racks.get(0), NetworkTopology.DEFAULT_RACK);
         assertEquals(racks.get(1), NetworkTopology.DEFAULT_RACK);
         assertEquals(racks.get(2), NetworkTopology.DEFAULT_RACK);
@@ -119,8 +121,13 @@ public class ZkBookieRackAffinityMappingTest {
         Map<String, Map<BookieSocketAddress, BookieInfo>> bookieMapping = new HashMap<>();
         Map<BookieSocketAddress, BookieInfo> mainBookieGroup = new HashMap<>();
 
-        mainBookieGroup.put(BOOKIE1, new BookieInfo("/rack0", null));
-        mainBookieGroup.put(BOOKIE2, new BookieInfo("/rack1", null));
+        BookieInfo bookieInfo0 = new BookieInfo();
+        bookieInfo0.setRack("/rack0");
+        mainBookieGroup.put(BOOKIE1, bookieInfo0);
+
+        BookieInfo bookieInfo1 = new BookieInfo();
+        bookieInfo1.setRack("/rack1");
+        mainBookieGroup.put(BOOKIE2, bookieInfo1);
 
         bookieMapping.put("group1", mainBookieGroup);
 
@@ -129,7 +136,7 @@ public class ZkBookieRackAffinityMappingTest {
 
         Thread.sleep(100);
 
-        racks = mapping.resolve(Lists.newArrayList("127.0.0.1", "127.0.0.2", "127.0.0.3"));
+        racks = mapping.resolve(Lists.newArrayList(BOOKIE1, BOOKIE2, BOOKIE3));
         assertEquals(racks.get(0), "/rack0");
         assertEquals(racks.get(1), "/rack1");
         assertEquals(racks.get(2), NetworkTopology.DEFAULT_RACK);
@@ -142,8 +149,13 @@ public class ZkBookieRackAffinityMappingTest {
         Map<String, Map<BookieSocketAddress, BookieInfo>> bookieMapping = new HashMap<>();
         Map<BookieSocketAddress, BookieInfo> mainBookieGroup = new HashMap<>();
 
-        mainBookieGroup.put(BOOKIE1, new BookieInfo("rack0", null));
-        mainBookieGroup.put(BOOKIE2, new BookieInfo("rack1", null));
+        BookieInfo bookieInfo0 = new BookieInfo();
+        bookieInfo0.setRack("rack0");
+        mainBookieGroup.put(BOOKIE1, bookieInfo0);
+
+        BookieInfo bookieInfo1 = new BookieInfo();
+        bookieInfo1.setRack("rack1");
+        mainBookieGroup.put(BOOKIE2, bookieInfo1);
 
         bookieMapping.put("group1", mainBookieGroup);
 
@@ -155,15 +167,16 @@ public class ZkBookieRackAffinityMappingTest {
         bkClientConf.setProperty(ZooKeeperCache.ZK_CACHE_INSTANCE, new ZooKeeperCache(localZkc) {
         });
         mapping.setConf(bkClientConf);
-        List<String> racks = mapping
-                .resolve(Lists.newArrayList(BOOKIE1.getHostName(), BOOKIE2.getHostName(), BOOKIE3.getHostName()));
+        List<String> racks = mapping.resolve(Lists.newArrayList(BOOKIE1, BOOKIE2, BOOKIE3));
         assertEquals(racks.get(0), "/rack0");
         assertEquals(racks.get(1), "/rack1");
         assertEquals(racks.get(2), NetworkTopology.DEFAULT_RACK);
 
         // add info for BOOKIE3 and check if the mapping picks up the change
         Map<BookieSocketAddress, BookieInfo> secondaryBookieGroup = new HashMap<>();
-        secondaryBookieGroup.put(BOOKIE3, new BookieInfo("rack0", null));
+        BookieInfo bookieInfo2 = new BookieInfo();
+        bookieInfo2.setRack("rack0");
+        secondaryBookieGroup.put(BOOKIE3, bookieInfo2);
 
         bookieMapping.put("group2", secondaryBookieGroup);
         localZkc.setData(ZkBookieRackAffinityMapping.BOOKIE_INFO_ROOT_PATH, jsonMapper.writeValueAsBytes(bookieMapping),
@@ -172,16 +185,16 @@ public class ZkBookieRackAffinityMappingTest {
         // wait for the zk to notify and update the mappings
         Thread.sleep(100);
 
-        racks = mapping.resolve(Lists.newArrayList("127.0.0.1", "127.0.0.2", "127.0.0.3"));
+        racks = mapping.resolve(Lists.newArrayList(BOOKIE1, BOOKIE2, BOOKIE3));
         assertEquals(racks.get(0), "/rack0");
         assertEquals(racks.get(1), "/rack1");
         assertEquals(racks.get(2), "/rack0");
 
-        localZkc.setData(ZkBookieRackAffinityMapping.BOOKIE_INFO_ROOT_PATH, "{}".getBytes(), -1);
+        localZkc.delete(ZkBookieRackAffinityMapping.BOOKIE_INFO_ROOT_PATH, -1);
 
         Thread.sleep(100);
 
-        racks = mapping.resolve(Lists.newArrayList("127.0.0.1", "127.0.0.2", "127.0.0.3"));
+        racks = mapping.resolve(Lists.newArrayList(BOOKIE1, BOOKIE2, BOOKIE3));
         assertEquals(racks.get(0), NetworkTopology.DEFAULT_RACK);
         assertEquals(racks.get(1), NetworkTopology.DEFAULT_RACK);
         assertEquals(racks.get(2), NetworkTopology.DEFAULT_RACK);

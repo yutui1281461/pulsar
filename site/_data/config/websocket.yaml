@@ -18,7 +18,7 @@
 #
 
 configs:
-- name: configurationStoreServers
+- name: globalZookeeperServers
   default: ''
 - name: zooKeeperSessionTimeoutMillis
   default: '30000'

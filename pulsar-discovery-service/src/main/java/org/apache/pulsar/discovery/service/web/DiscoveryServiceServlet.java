@@ -33,7 +33,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.core.Response.Status;
 
-import org.apache.pulsar.policies.data.loadbalancer.LoadManagerReport;
+import org.apache.pulsar.policies.data.loadbalancer.LoadReport;
 import org.apache.pulsar.zookeeper.ZooKeeperClientFactory;
 import org.apache.pulsar.zookeeper.ZookeeperClientFactoryImpl;
 import org.slf4j.Logger;
@@ -122,7 +122,7 @@ public class DiscoveryServiceServlet extends HttpServlet {
             throws ServletException, IOException {
 
         try {
-            LoadManagerReport broker = nextBroker();
+            LoadReport broker = nextBroker();
 
             URI brokerURI;
             if (request.getScheme().equals("http")) {
@@ -151,12 +151,12 @@ public class DiscoveryServiceServlet extends HttpServlet {
     }
 
     /**
-     * Find next broker url in round-robin
+     * Find next broke url in round-robin
      *
      * @return
      */
-    LoadManagerReport nextBroker() {
-        List<LoadManagerReport> availableBrokers = zkCache.getAvailableBrokers();
+    LoadReport nextBroker() {
+        List<LoadReport> availableBrokers = zkCache.getAvailableBrokers();
 
         if (availableBrokers.isEmpty()) {
             throw new RestException(Status.SERVICE_UNAVAILABLE, "No active broker is available");

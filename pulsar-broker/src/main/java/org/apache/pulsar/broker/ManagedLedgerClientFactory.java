@@ -21,7 +21,6 @@ package org.apache.pulsar.broker;
 import java.io.Closeable;
 import java.io.IOException;
 
-import java.util.concurrent.RejectedExecutionException;
 import org.apache.bookkeeper.client.BookKeeper;
 import org.apache.bookkeeper.mledger.ManagedLedgerFactory;
 import org.apache.bookkeeper.mledger.ManagedLedgerFactoryConfig;
@@ -45,8 +44,6 @@ public class ManagedLedgerClientFactory implements Closeable {
         ManagedLedgerFactoryConfig managedLedgerFactoryConfig = new ManagedLedgerFactoryConfig();
         managedLedgerFactoryConfig.setMaxCacheSize(conf.getManagedLedgerCacheSizeMB() * 1024L * 1024L);
         managedLedgerFactoryConfig.setCacheEvictionWatermark(conf.getManagedLedgerCacheEvictionWatermark());
-        managedLedgerFactoryConfig.setNumManagedLedgerWorkerThreads(conf.getManagedLedgerNumWorkerThreads());
-        managedLedgerFactoryConfig.setNumManagedLedgerSchedulerThreads(conf.getManagedLedgerNumSchedulerThreads());
 
         this.managedLedgerFactory = new ManagedLedgerFactoryImpl(bkClient, zkClient, managedLedgerFactoryConfig);
     }
@@ -55,27 +52,12 @@ public class ManagedLedgerClientFactory implements Closeable {
         return managedLedgerFactory;
     }
 
-    public BookKeeper getBookKeeperClient() {
-        return bkClient;
-    }
-
     public void close() throws IOException {
         try {
             managedLedgerFactory.shutdown();
             log.info("Closed managed ledger factory");
 
-            try {
-                bkClient.close();
-            } catch (RejectedExecutionException ree) {
-                // when closing bookkeeper client, it will error outs all pending metadata operations.
-                // those callbacks of those operations will be triggered, and submitted to the scheduler
-                // in managed ledger factory. but the managed ledger factory has been shutdown before,
-                // so `RejectedExecutionException` will be thrown there. we can safely ignore this exception.
-                //
-                // an alternative solution is to close bookkeeper client before shutting down managed ledger
-                // factory, however that might be introducing more unknowns.
-                log.warn("Encountered exceptions on closing bookkeeper client", ree);
-            }
+            bkClient.close();
             log.info("Closed BookKeeper client");
         } catch (Exception e) {
             log.warn(e.getMessage(), e);

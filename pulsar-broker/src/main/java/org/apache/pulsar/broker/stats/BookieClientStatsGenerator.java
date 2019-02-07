@@ -18,21 +18,21 @@
  */
 package org.apache.pulsar.broker.stats;
 
-import com.google.common.collect.Maps;
-
 import java.util.Map;
 
 import org.apache.bookkeeper.mledger.proto.PendingBookieOpsStats;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
-import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.naming.DestinationName;
+
+import com.google.common.collect.Maps;
 
 /**
  */
 public class BookieClientStatsGenerator {
     private final PulsarService pulsar;
 
-    // map<namespace, map<topic, bookieOpsStats>>
+    // map<namespace, map<destination, bookieOpsStats>>
     private Map<String, Map<String, PendingBookieOpsStats>> nsBookieClientStatsMap;
 
     public BookieClientStatsGenerator(PulsarService pulsar) {
@@ -46,12 +46,11 @@ public class BookieClientStatsGenerator {
 
     private Map<String, Map<String, PendingBookieOpsStats>> generate() throws Exception {
         if (pulsar.getBrokerService() != null && pulsar.getBrokerService().getTopics() != null) {
-
-            pulsar.getBrokerService().forEachTopic(topic -> {
-                if (topic instanceof PersistentTopic) {
-                    PersistentTopic persistentTopic = (PersistentTopic) topic;
-                    TopicName topicName = TopicName.get(persistentTopic.getName());
-                    put(topicName, persistentTopic.getManagedLedger().getStats().getPendingBookieOpsStats());
+            pulsar.getBrokerService().getTopics().forEach((name, topicFuture) -> {
+                PersistentTopic persistentTopic = (PersistentTopic) topicFuture.getNow(null);
+                if (persistentTopic != null) {
+                    DestinationName destinationName = DestinationName.get(persistentTopic.getName());
+                    put(destinationName, persistentTopic.getManagedLedger().getStats().getPendingBookieOpsStats());
                 }
             });
         }
@@ -59,14 +58,14 @@ public class BookieClientStatsGenerator {
         return nsBookieClientStatsMap;
     }
 
-    private void put(TopicName topicName, PendingBookieOpsStats bookieOpsStats) {
-        String namespace = topicName.getNamespace();
+    private void put(DestinationName destinationName, PendingBookieOpsStats bookieOpsStats) {
+        String namespace = destinationName.getNamespace();
         if (!nsBookieClientStatsMap.containsKey(namespace)) {
             Map<String, PendingBookieOpsStats> destBookieClientStatsMap = Maps.newTreeMap();
-            destBookieClientStatsMap.put(topicName.toString(), bookieOpsStats);
+            destBookieClientStatsMap.put(destinationName.toString(), bookieOpsStats);
             nsBookieClientStatsMap.put(namespace, destBookieClientStatsMap);
         } else {
-            nsBookieClientStatsMap.get(namespace).put(topicName.toString(), bookieOpsStats);
+            nsBookieClientStatsMap.get(namespace).put(destinationName.toString(), bookieOpsStats);
         }
 
     }

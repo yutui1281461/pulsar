@@ -18,13 +18,16 @@
  */
 package org.apache.bookkeeper.mledger.impl;
 
-import static org.testng.Assert.*;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
+import static org.testng.Assert.fail;
 
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
+
 import org.apache.bookkeeper.client.BKException;
-import org.apache.bookkeeper.client.api.DigestType;
+import org.apache.bookkeeper.client.BookKeeper.DigestType;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.AddEntryCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.CloseCallback;
 import org.apache.bookkeeper.mledger.Entry;
@@ -435,8 +438,8 @@ public class ManagedLedgerErrorsTest extends MockedBookKeeperTestCase {
         ManagedLedgerImpl ledger = (ManagedLedgerImpl) factory.open("recoverLongTimeAfterMultipleWriteErrors");
         ManagedCursor cursor = ledger.openCursor("c1");
 
-        bkc.failAfter(0, BKException.Code.BookieHandleNotAvailableException);
-        bkc.failAfter(1, BKException.Code.BookieHandleNotAvailableException);
+        bkc.failNow(BKException.Code.BookieHandleNotAvailableException,
+                BKException.Code.BookieHandleNotAvailableException);
 
         CountDownLatch counter = new CountDownLatch(2);
         AtomicReference<ManagedLedgerException> ex = new AtomicReference<>();
@@ -486,7 +489,6 @@ public class ManagedLedgerErrorsTest extends MockedBookKeeperTestCase {
         Position position = ledger.addEntry("entry".getBytes());
 
         bkc.failNow(BKException.Code.BookieHandleNotAvailableException);
-        zkc.failNow(Code.CONNECTIONLOSS);
 
         try {
             cursor.markDelete(position);

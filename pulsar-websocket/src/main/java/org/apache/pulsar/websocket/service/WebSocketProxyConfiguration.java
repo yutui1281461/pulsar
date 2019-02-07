@@ -18,11 +18,9 @@
  */
 package org.apache.pulsar.websocket.service;
 
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.pulsar.broker.authorization.PulsarAuthorizationProvider;
 import org.apache.pulsar.common.configuration.FieldContext;
 import org.apache.pulsar.common.configuration.PulsarConfiguration;
 
@@ -40,28 +38,22 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     // Name of the cluster to which this broker belongs to
     @FieldContext(required = true)
     private String clusterName;
-
-    // Pulsar cluster url to connect to broker (optional if configurationStoreServers present)
+    
+    // Pulsar cluster url to connect to broker (optional if globalZookeeperServers present)
     private String serviceUrl;
     private String serviceUrlTls;
     private String brokerServiceUrl;
     private String brokerServiceUrlTls;
 
-    // Path for the file used to determine the rotation status for the broker
-    // when responding to service discovery health checks
-    private String statusFilePath;
-
-    // Configuration Store connection string
-    @Deprecated
+    // Global Zookeeper quorum connection string
     private String globalZookeeperServers;
-    private String configurationStoreServers;
     // Zookeeper session timeout in milliseconds
     private long zooKeeperSessionTimeoutMillis = 30000;
 
     // Port to use to server HTTP request
-    private Integer webServicePort = 8080;
+    private int webServicePort = 8080;
     // Port to use to server HTTPS request
-    private Integer webServicePortTls;
+    private int webServicePortTls = 8443;
     // Hostname or IP address the service binds on, default is 0.0.0.0.
     private String bindAddress;
     // --- Authentication ---
@@ -71,43 +63,25 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     private Set<String> authenticationProviders = Sets.newTreeSet();
     // Enforce authorization
     private boolean authorizationEnabled;
-    // Authorization provider fully qualified class-name
-    private String authorizationProvider = PulsarAuthorizationProvider.class.getName();
-
     // Role names that are treated as "super-user", meaning they will be able to
     // do all admin operations and publish/consume from all topics
     private Set<String> superUserRoles = Sets.newTreeSet();
 
-    // Allow wildcard matching in authorization
-    // (wildcard matching only applicable if wildcard-char:
-    // * presents at first or last position eg: *.pulsar.service, pulsar.service.*)
+    // Actions that can be authorized by using permitted role name which contains wildcard
     private boolean authorizationAllowWildcardsMatching = false;
 
     // Authentication settings of the proxy itself. Used to connect to brokers
     private String brokerClientAuthenticationPlugin;
     private String brokerClientAuthenticationParameters;
-    // Path for the trusted TLS certificate file for outgoing connection to a server (broker)
-    private String brokerClientTrustCertsFilePath = "";
 
     // Number of IO threads in Pulsar Client used in WebSocket proxy
-    private int webSocketNumIoThreads = Runtime.getRuntime().availableProcessors();
-
-    // Number of threads to use in HTTP server
-    private int numHttpServerThreads = Runtime.getRuntime().availableProcessors();
-
+    private int numIoThreads = Runtime.getRuntime().availableProcessors();
     // Number of connections per Broker in Pulsar Client used in WebSocket proxy
-    private int webSocketConnectionsPerBroker = Runtime.getRuntime().availableProcessors();
-    // Time in milliseconds that idle WebSocket session times out
-    private int webSocketSessionIdleTimeoutMillis = 300000;
-
-    // When this parameter is not empty, unauthenticated users perform as anonymousUserRole
-    private String anonymousUserRole = null;
+    private int connectionsPerBroker = Runtime.getRuntime().availableProcessors();
 
     /***** --- TLS --- ****/
-    @Deprecated
+    // Enable TLS
     private boolean tlsEnabled = false;
-
-    private boolean brokerClientTlsEnabled = false;
     // Path for the TLS certificate file
     private String tlsCertificateFilePath;
     // Path for the TLS private key file
@@ -116,10 +90,7 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     private String tlsTrustCertsFilePath = "";
     // Accept untrusted TLS certificate from client
     private boolean tlsAllowInsecureConnection = false;
-    // Specify whether Client certificates are required for TLS
-    // Reject the Connection if the Client Certificate is not trusted.
-    private boolean tlsRequireTrustedClientCertOnConnect = false;
-
+    
     private Properties properties = new Properties();
 
     public String getClusterName() {
@@ -129,7 +100,7 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     public void setClusterName(String clusterName) {
         this.clusterName = clusterName;
     }
-
+    
     public String getServiceUrl() {
         return serviceUrl;
     }
@@ -162,30 +133,12 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.brokerServiceUrlTls = brokerServiceUrlTls;
     }
 
-    public String getStatusFilePath() {
-        return statusFilePath;
-    }
-
-    public void setStatusFilePath(String statusFilePath) {
-        this.statusFilePath = statusFilePath;
-    }
-
-    @Deprecated
     public String getGlobalZookeeperServers() {
         return globalZookeeperServers;
     }
 
-    @Deprecated
     public void setGlobalZookeeperServers(String globalZookeeperServers) {
         this.globalZookeeperServers = globalZookeeperServers;
-    }
-
-    public String getConfigurationStoreServers() {
-        return null == configurationStoreServers ? getGlobalZookeeperServers() : configurationStoreServers;
-    }
-
-    public void setConfigurationStoreServers(String configurationStoreServers) {
-        this.configurationStoreServers = configurationStoreServers;
     }
 
     public long getZooKeeperSessionTimeoutMillis() {
@@ -196,16 +149,16 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.zooKeeperSessionTimeoutMillis = zooKeeperSessionTimeoutMillis;
     }
 
-    public Optional<Integer> getWebServicePort() {
-        return Optional.ofNullable(webServicePort);
+    public int getWebServicePort() {
+        return webServicePort;
     }
 
     public void setWebServicePort(int webServicePort) {
         this.webServicePort = webServicePort;
     }
 
-    public Optional<Integer> getWebServicePortTls() {
-        return Optional.ofNullable(webServicePortTls);
+    public int getWebServicePortTls() {
+        return webServicePortTls;
     }
 
     public void setWebServicePortTls(int webServicePortTls) {
@@ -244,14 +197,6 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.authorizationEnabled = authorizationEnabled;
     }
 
-    public String getAuthorizationProvider() {
-        return authorizationProvider;
-    }
-
-    public void setAuthorizationProvider(String authorizationProvider) {
-        this.authorizationProvider = authorizationProvider;
-    }
-
     public boolean getAuthorizationAllowWildcardsMatching() {
         return authorizationAllowWildcardsMatching;
     }
@@ -276,14 +221,6 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.brokerClientAuthenticationPlugin = brokerClientAuthenticationPlugin;
     }
 
-    public String getBrokerClientTrustCertsFilePath() {
-        return brokerClientTrustCertsFilePath;
-    }
-
-    public void setBrokerClientTrustCertsFilePath(String brokerClientTrustCertsFilePath) {
-        this.brokerClientTrustCertsFilePath = brokerClientTrustCertsFilePath;
-    }
-
     public String getBrokerClientAuthenticationParameters() {
         return brokerClientAuthenticationParameters;
     }
@@ -292,72 +229,20 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.brokerClientAuthenticationParameters = brokerClientAuthenticationParameters;
     }
 
-    @Deprecated
-    public int getNumIoThreads() {
-        return getWebSocketNumIoThreads();
+    public int getNumIoThreads() { return numIoThreads; }
+
+    public void setNumIoThreads(int numIoThreads) { this.numIoThreads = numIoThreads; }
+
+    public int getConnectionsPerBroker() { return connectionsPerBroker; }
+
+    public void setConnectionsPerBroker(int connectionsPerBroker) { this.connectionsPerBroker = connectionsPerBroker; }
+
+    public boolean isTlsEnabled() {
+        return tlsEnabled;
     }
 
-    @Deprecated
-    public void setNumIoThreads(int numIoThreads) {
-        setWebSocketNumIoThreads(numIoThreads);
-    }
-
-    public int getWebSocketNumIoThreads() {
-        return webSocketNumIoThreads;
-    }
-
-    public void setWebSocketNumIoThreads(int webSocketNumIoThreads) {
-        this.webSocketNumIoThreads = webSocketNumIoThreads;
-    }
-
-    public int getNumHttpServerThreads() {
-        return numHttpServerThreads;
-    }
-
-    public void setNumHttpServerThreads(int numHttpServerThreads) {
-        this.numHttpServerThreads = numHttpServerThreads;
-    }
-
-    @Deprecated
-    public int getConnectionsPerBroker() {
-        return getWebSocketConnectionsPerBroker();
-    }
-
-    @Deprecated
-    public void setConnectionsPerBroker(int connectionsPerBroker) {
-        setWebSocketConnectionsPerBroker(connectionsPerBroker);
-    }
-
-    public int getWebSocketConnectionsPerBroker() {
-        return webSocketConnectionsPerBroker;
-    }
-
-    public void setWebSocketConnectionsPerBroker(int webSocketConnectionsPerBroker) {
-        this.webSocketConnectionsPerBroker = webSocketConnectionsPerBroker;
-    }
-
-    public int getWebSocketSessionIdleTimeoutMillis() {
-        return webSocketSessionIdleTimeoutMillis;
-    }
-
-    public void setWebSocketSessionIdleTimeoutMillis(int webSocketSessionIdleTimeoutMillis) {
-        this.webSocketSessionIdleTimeoutMillis = webSocketSessionIdleTimeoutMillis;
-    }
-
-    public String getAnonymousUserRole() {
-        return anonymousUserRole;
-    }
-
-    public void setAnonymousUserRole(String anonymousUserRole) {
-        this.anonymousUserRole = anonymousUserRole;
-    }
-
-    public boolean isBrokerClientTlsEnabled() {
-        return brokerClientTlsEnabled || tlsEnabled;
-    }
-
-    public void setBrokerClientTlsEnabled(boolean brokerClientTlsEnabled) {
-        this.brokerClientTlsEnabled = brokerClientTlsEnabled;
+    public void setTlsEnabled(boolean tlsEnabled) {
+        this.tlsEnabled = tlsEnabled;
     }
 
     public String getTlsCertificateFilePath() {
@@ -391,7 +276,7 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
     public void setTlsAllowInsecureConnection(boolean tlsAllowInsecureConnection) {
         this.tlsAllowInsecureConnection = tlsAllowInsecureConnection;
     }
-
+    
     public Properties getProperties() {
         return properties;
     }
@@ -400,11 +285,4 @@ public class WebSocketProxyConfiguration implements PulsarConfiguration {
         this.properties = properties;
     }
 
-    public boolean getTlsRequireTrustedClientCertOnConnect() {
-        return tlsRequireTrustedClientCertOnConnect;
-    }
-
-    public void setTlsRequireTrustedClientCertOnConnect(boolean tlsRequireTrustedClientCertOnConnect) {
-        this.tlsRequireTrustedClientCertOnConnect = tlsRequireTrustedClientCertOnConnect;
-    }
 }

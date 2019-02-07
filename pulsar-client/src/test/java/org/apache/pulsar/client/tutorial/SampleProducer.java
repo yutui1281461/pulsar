@@ -26,14 +26,14 @@ import org.apache.pulsar.client.api.PulsarClientException;
 
 public class SampleProducer {
     public static void main(String[] args) throws PulsarClientException, InterruptedException, IOException {
-        PulsarClient client = PulsarClient.builder().serviceUrl("pulsar://localhost:6650").build();
+        PulsarClient pulsarClient = PulsarClient.create("http://127.0.0.1:8080");
 
-        Producer<byte[]> producer = client.newProducer().topic("persistent://my-tenant/my-ns/my-topic").create();
+        Producer producer = pulsarClient.createProducer("persistent://my-property/use/my-ns/my-topic");
 
         for (int i = 0; i < 10; i++) {
             producer.send("my-message".getBytes());
         }
 
-        client.close();
+        pulsarClient.close();
     }
 }

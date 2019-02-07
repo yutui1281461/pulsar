@@ -20,32 +20,28 @@
 from setuptools import setup
 from distutils.core import Extension
 import subprocess
-import sys
 
 from distutils.command import build_ext
 
 
 def get_version():
     # Get the pulsar version from pom.xml
-    command = '''cat ../../pom.xml | xmllint --format - | \\
-        sed "s/xmlns=\\".*\\"//g" | xmllint --stream --pattern /project/version --debug - | \\
-        grep -A 2 "matches pattern" | grep text | sed "s/.* [0-9] //g"'''
+    command = '''pushd ../.. > /dev/null
+    mvn -q \\
+         -Dexec.executable="echo" \\
+         -Dexec.args='${project.version}' \\
+         --non-recursive \\
+         org.codehaus.mojo:exec-maven-plugin:1.3.1:exec;\\
+     popd > /dev/null'''
     process = subprocess.Popen(['bash', '-c', command], stdout=subprocess.PIPE)
     output, error = process.communicate()
     if error:
         raise 'Failed to get version: ' + error
-
-    # Strip the '-incubating' suffix, since it prevents the packages
-    # from being uploaded into PyPI
-    return output.strip().decode('utf-8', 'strict').split('-')[0]
+    return str(output.strip())
 
 
 VERSION = get_version()
 
-if sys.version_info[0] == 2:
-    PY2 = True
-else:
-    PY2 = False
 
 # This is a workaround to have setuptools to include
 # the already compiled _pulsar.so library
@@ -62,31 +58,16 @@ class my_build_ext(build_ext.build_ext):
         shutil.copyfile('_pulsar.so', self.get_ext_fullpath(ext.name))
 
 
-dependencies = [
-    'grpcio', 'protobuf',
-    'six',
-    'fastavro',
-
-    # functions dependencies
-    "prometheus_client",
-    "ratelimit"
-]
-
-if PY2:
-    # Python 2 compat dependencies
-    dependencies += ['enum34']
-
 setup(
     name="pulsar-client",
     version=VERSION,
-    packages=['pulsar', 'pulsar.schema', 'pulsar.functions'],
+    py_modules=['pulsar'],
     cmdclass={'build_ext': my_build_ext},
     ext_modules=[Extension('_pulsar', [])],
 
     author="Pulsar Devs",
-    author_email="dev@pulsar.apache.org",
+    author_email="dev@pulsar.incubator.apache.org",
     description="Apache Pulsar Python client library",
     license="Apache License v2.0",
-    url="https://pulsar.apache.org/",
-    install_requires=dependencies,
+    url="http://pulsar.incubator.apache.org/",
 )

@@ -18,7 +18,6 @@
  */
 package org.apache.pulsar.broker.loadbalance;
 
-import java.util.Optional;
 import java.util.Set;
 
 import org.apache.pulsar.broker.BundleData;
@@ -33,7 +32,7 @@ public interface ModularLoadManagerStrategy {
 
     /**
      * Find a suitable broker to assign the given bundle to.
-     *
+     * 
      * @param candidates
      *            The candidates for which the bundle may be assigned.
      * @param bundleToAssign
@@ -44,12 +43,12 @@ public interface ModularLoadManagerStrategy {
      *            The service configuration.
      * @return The name of the selected broker as it appears on ZooKeeper.
      */
-    Optional<String> selectBroker(Set<String> candidates, BundleData bundleToAssign, LoadData loadData,
+    String selectBroker(Set<String> candidates, BundleData bundleToAssign, LoadData loadData,
             ServiceConfiguration conf);
 
     /**
      * Create a placement strategy using the configuration.
-     *
+     * 
      * @param conf
      *            ServiceConfiguration to use.
      * @return A placement strategy from the given configurations.

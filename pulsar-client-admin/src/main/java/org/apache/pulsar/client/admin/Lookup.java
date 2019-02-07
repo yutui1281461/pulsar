@@ -19,24 +19,16 @@
 package org.apache.pulsar.client.admin;
 
 /**
- * This is an interface class to allow using command line tool to quickly lookup the broker serving the topic.
+ * This is an interface class to allow using command line tool to quickly lookup the broker serving the
+ * destination.
  */
 public interface Lookup {
 
     /**
-     * Lookup a topic
+     * Lookup a destination
      *
-     * @param topic
-     * @return the broker URL that serves the topic
+     * @param destination
+     * @return the broker URL that serves the destination
      */
-    public String lookupTopic(String topic) throws PulsarAdminException;
-
-    /**
-     * Get a bundle range of a topic
-     *
-     * @param topic
-     * @return
-     * @throws PulsarAdminException
-     */
-    public String getBundleRange(String topic) throws PulsarAdminException;
+    public String lookupDestination(String destination) throws PulsarAdminException;
 }

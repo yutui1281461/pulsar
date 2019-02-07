@@ -20,8 +20,6 @@ package org.apache.pulsar.broker.service;
 
 import static org.testng.Assert.assertEquals;
 
-import com.google.common.collect.Sets;
-
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,28 +32,31 @@ import java.util.concurrent.TimeUnit;
 import org.apache.bookkeeper.test.PortManager;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.ServiceConfiguration;
+import org.apache.pulsar.broker.service.BrokerService;
 import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.api.Authentication;
+import org.apache.pulsar.client.api.ClientConfiguration;
 import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageBuilder;
 import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.ProducerBuilder;
+import org.apache.pulsar.client.api.ProducerConfiguration;
 import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.TypedMessageBuilder;
-import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.client.util.FutureUtil;
+import org.apache.pulsar.common.naming.DestinationName;
 import org.apache.pulsar.common.policies.data.ClusterData;
-import org.apache.pulsar.common.policies.data.TenantInfo;
-import org.apache.pulsar.common.util.FutureUtil;
+import org.apache.pulsar.common.policies.data.PropertyAdmin;
 import org.apache.pulsar.zookeeper.LocalBookkeeperEnsemble;
 import org.apache.pulsar.zookeeper.ZookeeperServerTest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+
 public class ReplicatorTestBase {
     URL url1;
-    URL urlTls1;
-    ServiceConfiguration config1 = new ServiceConfiguration();
     PulsarService pulsar1;
     BrokerService ns1;
 
@@ -63,16 +64,14 @@ public class ReplicatorTestBase {
     LocalBookkeeperEnsemble bkEnsemble1;
 
     URL url2;
-    URL urlTls2;
-    ServiceConfiguration config2 = new ServiceConfiguration();
+    ServiceConfiguration config2;
     PulsarService pulsar2;
     BrokerService ns2;
     PulsarAdmin admin2;
     LocalBookkeeperEnsemble bkEnsemble2;
 
     URL url3;
-    URL urlTls3;
-    ServiceConfiguration config3 = new ServiceConfiguration();
+    ServiceConfiguration config3;
     PulsarService pulsar3;
     BrokerService ns3;
     PulsarAdmin admin3;
@@ -84,15 +83,12 @@ public class ReplicatorTestBase {
 
     static final int TIME_TO_CHECK_BACKLOG_QUOTA = 5;
 
-    protected final static String TLS_SERVER_CERT_FILE_PATH = "./src/test/resources/certificate/server.crt";
-    protected final static String TLS_SERVER_KEY_FILE_PATH = "./src/test/resources/certificate/server.key";
-
     // Default frequency
     public int getBrokerServicePurgeInactiveFrequency() {
         return 60;
     }
 
-    public boolean isBrokerServicePurgeInactiveTopic() {
+    public boolean isBrokerServicePurgeInactiveDestination() {
         return false;
     }
 
@@ -104,120 +100,95 @@ public class ReplicatorTestBase {
 
         // Start region 1
         int zkPort1 = PortManager.nextFreePort();
-        bkEnsemble1 = new LocalBookkeeperEnsemble(3, zkPort1, () -> PortManager.nextFreePort());
+        bkEnsemble1 = new LocalBookkeeperEnsemble(3, zkPort1, PortManager.nextFreePort());
         bkEnsemble1.start();
 
         int webServicePort1 = PortManager.nextFreePort();
-        int webServicePortTls1 = PortManager.nextFreePort();
 
         // NOTE: we have to instantiate a new copy of System.getProperties() to make sure pulsar1 and pulsar2 have
         // completely
         // independent config objects instead of referring to the same properties object
+        ServiceConfiguration config1 = new ServiceConfiguration();
         config1.setClusterName("r1");
-        config1.setAdvertisedAddress("localhost");
         config1.setWebServicePort(webServicePort1);
-        config1.setWebServicePortTls(webServicePortTls1);
         config1.setZookeeperServers("127.0.0.1:" + zkPort1);
-        config1.setConfigurationStoreServers("127.0.0.1:" + globalZKPort + "/foo");
-        config1.setBrokerDeleteInactiveTopicsEnabled(isBrokerServicePurgeInactiveTopic());
+        config1.setGlobalZookeeperServers("127.0.0.1:" + globalZKPort + "/foo");
+        config1.setBrokerDeleteInactiveTopicsEnabled(isBrokerServicePurgeInactiveDestination());
         config1.setBrokerServicePurgeInactiveFrequencyInSeconds(
                 inSec(getBrokerServicePurgeInactiveFrequency(), TimeUnit.SECONDS));
         config1.setBrokerServicePort(PortManager.nextFreePort());
-        config1.setBrokerServicePortTls(PortManager.nextFreePort());
-        config1.setTlsCertificateFilePath(TLS_SERVER_CERT_FILE_PATH);
-        config1.setTlsKeyFilePath(TLS_SERVER_KEY_FILE_PATH);
-        config1.setTlsTrustCertsFilePath(TLS_SERVER_CERT_FILE_PATH);
         config1.setBacklogQuotaCheckIntervalInSeconds(TIME_TO_CHECK_BACKLOG_QUOTA);
-        config1.setDefaultNumberOfNamespaceBundles(1);
         pulsar1 = new PulsarService(config1);
         pulsar1.start();
         ns1 = pulsar1.getBrokerService();
 
-        url1 = new URL("http://localhost:" + webServicePort1);
-        urlTls1 = new URL("https://localhost:" + webServicePortTls1);
-        admin1 = PulsarAdmin.builder().serviceHttpUrl(url1.toString()).build();
+        url1 = new URL("http://127.0.0.1:" + webServicePort1);
+        admin1 = new PulsarAdmin(url1, (Authentication) null);
 
         // Start region 2
 
         // Start zk & bks
         int zkPort2 = PortManager.nextFreePort();
-        bkEnsemble2 = new LocalBookkeeperEnsemble(3, zkPort2, () -> PortManager.nextFreePort());
+        bkEnsemble2 = new LocalBookkeeperEnsemble(3, zkPort2, PortManager.nextFreePort());
         bkEnsemble2.start();
 
         int webServicePort2 = PortManager.nextFreePort();
-        int webServicePortTls2 = PortManager.nextFreePort();
+        config2 = new ServiceConfiguration();
         config2.setClusterName("r2");
-        config2.setAdvertisedAddress("localhost");
         config2.setWebServicePort(webServicePort2);
-        config2.setWebServicePortTls(webServicePortTls2);
         config2.setZookeeperServers("127.0.0.1:" + zkPort2);
-        config2.setConfigurationStoreServers("127.0.0.1:" + globalZKPort + "/foo");
-        config2.setBrokerDeleteInactiveTopicsEnabled(isBrokerServicePurgeInactiveTopic());
+        config2.setGlobalZookeeperServers("127.0.0.1:" + globalZKPort + "/foo");
+        config2.setBrokerDeleteInactiveTopicsEnabled(isBrokerServicePurgeInactiveDestination());
         config2.setBrokerServicePurgeInactiveFrequencyInSeconds(
                 inSec(getBrokerServicePurgeInactiveFrequency(), TimeUnit.SECONDS));
         config2.setBrokerServicePort(PortManager.nextFreePort());
-        config2.setBrokerServicePortTls(PortManager.nextFreePort());
-        config2.setTlsCertificateFilePath(TLS_SERVER_CERT_FILE_PATH);
-        config2.setTlsKeyFilePath(TLS_SERVER_KEY_FILE_PATH);
-        config2.setTlsTrustCertsFilePath(TLS_SERVER_CERT_FILE_PATH);
         config2.setBacklogQuotaCheckIntervalInSeconds(TIME_TO_CHECK_BACKLOG_QUOTA);
-        config2.setDefaultNumberOfNamespaceBundles(1);
         pulsar2 = new PulsarService(config2);
         pulsar2.start();
         ns2 = pulsar2.getBrokerService();
 
-        url2 = new URL("http://localhost:" + webServicePort2);
-        urlTls2 = new URL("https://localhost:" + webServicePortTls2);
-        admin2 = PulsarAdmin.builder().serviceHttpUrl(url2.toString()).build();
+        url2 = new URL("http://127.0.0.1:" + webServicePort2);
+        admin2 = new PulsarAdmin(url2, (Authentication) null);
 
         // Start region 3
 
         // Start zk & bks
         int zkPort3 = PortManager.nextFreePort();
-        bkEnsemble3 = new LocalBookkeeperEnsemble(3, zkPort3, () -> PortManager.nextFreePort());
+        bkEnsemble3 = new LocalBookkeeperEnsemble(3, zkPort3, PortManager.nextFreePort());
         bkEnsemble3.start();
 
         int webServicePort3 = PortManager.nextFreePort();
-        int webServicePortTls3 = PortManager.nextFreePort();
+        config3 = new ServiceConfiguration();
         config3.setClusterName("r3");
-        config3.setAdvertisedAddress("localhost");
         config3.setWebServicePort(webServicePort3);
-        config3.setWebServicePortTls(webServicePortTls3);
         config3.setZookeeperServers("127.0.0.1:" + zkPort3);
-        config3.setConfigurationStoreServers("127.0.0.1:" + globalZKPort + "/foo");
-        config3.setBrokerDeleteInactiveTopicsEnabled(isBrokerServicePurgeInactiveTopic());
+        config3.setGlobalZookeeperServers("127.0.0.1:" + globalZKPort + "/foo");
+        config3.setBrokerDeleteInactiveTopicsEnabled(isBrokerServicePurgeInactiveDestination());
         config3.setBrokerServicePurgeInactiveFrequencyInSeconds(
                 inSec(getBrokerServicePurgeInactiveFrequency(), TimeUnit.SECONDS));
         config3.setBrokerServicePort(PortManager.nextFreePort());
-        config3.setBrokerServicePortTls(PortManager.nextFreePort());
-        config3.setTlsEnabled(true);
-        config3.setTlsCertificateFilePath(TLS_SERVER_CERT_FILE_PATH);
-        config3.setTlsKeyFilePath(TLS_SERVER_KEY_FILE_PATH);
-        config3.setTlsTrustCertsFilePath(TLS_SERVER_CERT_FILE_PATH);
-        config3.setDefaultNumberOfNamespaceBundles(1);
         pulsar3 = new PulsarService(config3);
         pulsar3.start();
         ns3 = pulsar3.getBrokerService();
 
-        url3 = new URL("http://localhost:" + webServicePort3);
-        urlTls3 = new URL("https://localhost:" + webServicePortTls3);
-        admin3 = PulsarAdmin.builder().serviceHttpUrl(url3.toString()).build();
+        url3 = new URL("http://127.0.0.1:" + webServicePort3);
+        admin3 = new PulsarAdmin(url3, (Authentication) null);
 
         // Provision the global namespace
-        admin1.clusters().createCluster("r1", new ClusterData(url1.toString(), urlTls1.toString(),
-                pulsar1.getBrokerServiceUrl(), pulsar1.getBrokerServiceUrlTls()));
-        admin1.clusters().createCluster("r2", new ClusterData(url2.toString(), urlTls2.toString(),
-                pulsar2.getBrokerServiceUrl(), pulsar2.getBrokerServiceUrlTls()));
-        admin1.clusters().createCluster("r3", new ClusterData(url3.toString(), urlTls3.toString(),
-                pulsar3.getBrokerServiceUrl(), pulsar3.getBrokerServiceUrlTls()));
+        admin1.clusters().createCluster("r1", new ClusterData(url1.toString(), null, pulsar1.getBrokerServiceUrl(),
+                pulsar1.getBrokerServiceUrlTls()));
+        admin1.clusters().createCluster("r2", new ClusterData(url2.toString(), null, pulsar2.getBrokerServiceUrl(),
+                pulsar1.getBrokerServiceUrlTls()));
+        admin1.clusters().createCluster("r3", new ClusterData(url3.toString(), null, pulsar3.getBrokerServiceUrl(),
+                pulsar1.getBrokerServiceUrlTls()));
 
-        admin1.clusters().createCluster("global", new ClusterData("http://global:8080", "https://global:8443"));
-        admin1.tenants().createTenant("pulsar",
-                new TenantInfo(Sets.newHashSet("appid1", "appid2", "appid3"), Sets.newHashSet("r1", "r2", "r3")));
-        admin1.namespaces().createNamespace("pulsar/ns");
-        admin1.namespaces().setNamespaceReplicationClusters("pulsar/ns", Sets.newHashSet("r1", "r2", "r3"));
-        admin1.namespaces().createNamespace("pulsar/ns1");
-        admin1.namespaces().setNamespaceReplicationClusters("pulsar/ns1", Sets.newHashSet("r1", "r2"));
+        admin1.clusters().createCluster("global", new ClusterData("http://global:8080"));
+        admin1.properties().createProperty("pulsar",
+                new PropertyAdmin(Lists.newArrayList("appid1", "appid2", "appid3"), Sets.newHashSet("r1", "r2", "r3")));
+        admin1.namespaces().createNamespace("pulsar/global/ns");
+        admin1.namespaces().setNamespaceReplicationClusters("pulsar/global/ns", Lists.newArrayList("r1", "r2", "r3"));
+        admin1.namespaces().createNamespace("pulsar/global/ns1");
+        admin1.namespaces().setNamespaceReplicationClusters("pulsar/global/ns1", Lists.newArrayList("r1", "r2"));
 
         assertEquals(admin2.clusters().getCluster("r1").getServiceUrl(), url1.toString());
         assertEquals(admin2.clusters().getCluster("r2").getServiceUrl(), url2.toString());
@@ -225,7 +196,16 @@ public class ReplicatorTestBase {
         assertEquals(admin2.clusters().getCluster("r1").getBrokerServiceUrl(), pulsar1.getBrokerServiceUrl());
         assertEquals(admin2.clusters().getCluster("r2").getBrokerServiceUrl(), pulsar2.getBrokerServiceUrl());
         assertEquals(admin2.clusters().getCluster("r3").getBrokerServiceUrl(), pulsar3.getBrokerServiceUrl());
-
+        /*
+         * assertEquals(admin2.clusters().getCluster("global").getServiceUrl(), "http://global:8080");
+         * assertEquals(admin2.properties().getPropertyAdmin("pulsar").getAdminRoles(), Lists.newArrayList("appid1",
+         * "appid2")); assertEquals(admin2.namespaces().getPolicies("pulsar/global/ns").replication_clusters,
+         * Lists.newArrayList("r1", "r2", "r3"));
+         *
+         * admin1.namespaces().createNamespace("pulsar/global/ns2");
+         * admin1.namespaces().setNamespaceReplicationClusters("pulsar/global/ns2", Lists.newArrayList("r1", "r2",
+         * "r3"));
+         */
         Thread.sleep(100);
         log.info("--- ReplicatorTestBase::setup completed ---");
 
@@ -244,8 +224,13 @@ public class ReplicatorTestBase {
         admin3.close();
 
         pulsar3.close();
+        ns3.close();
+
         pulsar2.close();
+        ns2.close();
+
         pulsar1.close();
+        ns1.close();
 
         bkEnsemble1.stop();
         bkEnsemble2.stop();
@@ -258,32 +243,33 @@ public class ReplicatorTestBase {
         String namespace;
         String topicName;
         PulsarClient client;
-        Producer<byte[]> producer;
+        Producer producer;
 
-        MessageProducer(URL url, final TopicName dest) throws Exception {
+        MessageProducer(URL url, final DestinationName dest) throws Exception {
             this.url = url;
             this.namespace = dest.getNamespace();
             this.topicName = dest.toString();
-            client = PulsarClient.builder().serviceUrl(url.toString()).statsInterval(0, TimeUnit.SECONDS).build();
-            producer = client.newProducer()
-                .topic(topicName)
-                .enableBatching(false)
-                .messageRoutingMode(MessageRoutingMode.SinglePartition)
-                .create();
+            ClientConfiguration conf = new ClientConfiguration();
+            conf.setStatsInterval(0, TimeUnit.SECONDS);
+            client = PulsarClient.create(url.toString(), conf);
+            producer = client.createProducer(topicName);
 
         }
 
-        MessageProducer(URL url, final TopicName dest, boolean batch) throws Exception {
+        MessageProducer(URL url, final DestinationName dest, boolean batch) throws Exception {
             this.url = url;
             this.namespace = dest.getNamespace();
             this.topicName = dest.toString();
-            client = PulsarClient.builder().serviceUrl(url.toString()).statsInterval(0, TimeUnit.SECONDS).build();
-            ProducerBuilder<byte[]> producerBuilder = client.newProducer()
-                .topic(topicName)
-                .enableBatching(batch)
-                .batchingMaxPublishDelay(1, TimeUnit.SECONDS)
-                .batchingMaxMessages(5);
-            producer = producerBuilder.create();
+            ClientConfiguration conf = new ClientConfiguration();
+            conf.setStatsInterval(0, TimeUnit.SECONDS);
+            client = PulsarClient.create(url.toString(), conf);
+            ProducerConfiguration producerConfiguration = new ProducerConfiguration();
+            if (batch) {
+                producerConfiguration.setBatchingEnabled(true);
+                producerConfiguration.setBatchingMaxPublishDelay(1, TimeUnit.SECONDS);
+                producerConfiguration.setBatchingMaxMessages(5);
+            }
+            producer = client.createProducer(topicName, producerConfiguration);
 
         }
 
@@ -308,15 +294,12 @@ public class ReplicatorTestBase {
 
         }
 
-        TypedMessageBuilder<byte[]> newMessage() {
-            return producer.newMessage();
-        }
-
-        void produce(int messages, TypedMessageBuilder<byte[]> messageBuilder) throws Exception {
+        void produce(int messages, MessageBuilder messageBuilder) throws Exception {
             log.info("Start sending messages");
             for (int i = 0; i < messages; i++) {
                 final String m = new String("test-builder-" + i);
-                messageBuilder.value(m.getBytes()).send();
+                messageBuilder.setContent(m.getBytes());
+                producer.send(messageBuilder.build());
                 log.info("Sent message {}", m);
             }
         }
@@ -332,21 +315,22 @@ public class ReplicatorTestBase {
         final String namespace;
         final String topicName;
         final PulsarClient client;
-        final Consumer<byte[]> consumer;
+        final Consumer consumer;
 
-        MessageConsumer(URL url, final TopicName dest) throws Exception {
+        MessageConsumer(URL url, final DestinationName dest) throws Exception {
             this(url, dest, "sub-id");
         }
 
-        MessageConsumer(URL url, final TopicName dest, String subId) throws Exception {
+        MessageConsumer(URL url, final DestinationName dest, String subId) throws Exception {
             this.url = url;
             this.namespace = dest.getNamespace();
             this.topicName = dest.toString();
-
-            client = PulsarClient.builder().serviceUrl(url.toString()).statsInterval(0, TimeUnit.SECONDS).build();
+            ClientConfiguration conf = new ClientConfiguration();
+            conf.setStatsInterval(0, TimeUnit.SECONDS);
+            client = PulsarClient.create(url.toString(), conf);
 
             try {
-                consumer = client.newConsumer().topic(topicName).subscriptionName(subId).subscribe();
+                consumer = client.subscribe(topicName, subId);
             } catch (Exception e) {
                 client.close();
                 throw e;
@@ -355,7 +339,7 @@ public class ReplicatorTestBase {
 
         void receive(int messages) throws Exception {
             log.info("Start receiving messages");
-            Message<byte[]> msg = null;
+            Message msg = null;
 
             for (int i = 0; i < messages; i++) {
                 msg = consumer.receive();

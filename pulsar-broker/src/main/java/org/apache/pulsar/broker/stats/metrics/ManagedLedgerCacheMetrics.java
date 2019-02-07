@@ -57,7 +57,7 @@ public class ManagedLedgerCacheMetrics extends AbstractMetrics {
         m.put("brk_ml_cache_hits_throughput", mlCacheStats.getCacheHitsThroughput());
         m.put("brk_ml_cache_misses_throughput", mlCacheStats.getCacheMissesThroughput());
 
-        PooledByteBufAllocator allocator = EntryCacheImpl.ALLOCATOR;
+        PooledByteBufAllocator allocator = EntryCacheImpl.allocator;
         long activeAllocations = 0;
         long activeAllocationsTiny = 0;
         long activeAllocationsSmall = 0;
@@ -66,7 +66,7 @@ public class ManagedLedgerCacheMetrics extends AbstractMetrics {
         long totalAllocated = 0;
         long totalUsed = 0;
 
-        for (PoolArenaMetric arena : allocator.metric().directArenas()) {
+        for (PoolArenaMetric arena : allocator.directArenas()) {
             activeAllocations += arena.numActiveAllocations();
             activeAllocationsTiny += arena.numActiveTinyAllocations();
             activeAllocationsSmall += arena.numActiveSmallAllocations();

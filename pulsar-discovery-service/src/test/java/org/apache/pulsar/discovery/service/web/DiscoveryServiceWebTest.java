@@ -53,13 +53,16 @@ import org.apache.pulsar.common.policies.data.BundlesData;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.apache.pulsar.discovery.service.server.ServerManager;
 import org.apache.pulsar.discovery.service.server.ServiceConfig;
+import org.apache.pulsar.discovery.service.web.DiscoveryServiceServlet;
+import org.apache.pulsar.discovery.service.web.RestException;
+import org.apache.pulsar.discovery.service.web.ZookeeperCacheLoader;
 import org.apache.pulsar.policies.data.loadbalancer.LoadReport;
 import org.apache.pulsar.zookeeper.ZookeeperClientFactoryImpl;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs;
 import org.glassfish.jersey.client.ClientConfig;
-import org.glassfish.jersey.logging.LoggingFeature;
+import org.glassfish.jersey.filter.LoggingFilter;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -77,11 +80,11 @@ import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
  */
 public class DiscoveryServiceWebTest extends BaseZKStarterTest{
 
-    private Client client = ClientBuilder.newClient(new ClientConfig().register(LoggingFeature.class));
+    private Client client = ClientBuilder.newClient(new ClientConfig().register(LoggingFilter.class));
     private static final String TLS_SERVER_CERT_FILE_PATH = "./src/test/resources/certificate/server.crt";
     private static final String TLS_SERVER_KEY_FILE_PATH = "./src/test/resources/certificate/server.key";
-
-
+    
+    
     @BeforeMethod
     private void init() throws Exception {
         start();
@@ -91,7 +94,7 @@ public class DiscoveryServiceWebTest extends BaseZKStarterTest{
     private void cleanup() throws Exception {
         close();
     }
-
+    
     @Test
     public void testNextBroker() throws Exception {
 
@@ -194,6 +197,7 @@ public class DiscoveryServiceWebTest extends BaseZKStarterTest{
         ServiceConfig config = new ServiceConfig();
         config.setWebServicePort(port);
         config.setWebServicePortTls(tlsPort);
+        config.setTlsEnabled(true);
         config.setTlsCertificateFilePath(TLS_SERVER_CERT_FILE_PATH);
         config.setTlsKeyFilePath(TLS_SERVER_KEY_FILE_PATH);
         ServerManager server = new ServerManager(config);
@@ -289,7 +293,7 @@ public class DiscoveryServiceWebTest extends BaseZKStarterTest{
                     redirectedBroker = e.getCause().getMessage().split(":")[0];
                 } else {
                     // fail
-                    fail("Expected to receive UnknownHostException, but received : " + e);
+                    fail();
                 }
             }
             return redirectedBroker;

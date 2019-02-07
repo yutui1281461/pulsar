@@ -48,15 +48,15 @@ public class ReplicationMetrics {
         return replicationMetrics;
     }
 
-    private final Handle<ReplicationMetrics> recyclerHandle;
+    private final Handle recyclerHandle;
 
-    private ReplicationMetrics(Handle<ReplicationMetrics> recyclerHandle) {
+    private ReplicationMetrics(Handle recyclerHandle) {
         this.recyclerHandle = recyclerHandle;
     }
 
     private static final Recycler<ReplicationMetrics> RECYCLER = new Recycler<ReplicationMetrics>() {
         @Override
-        protected ReplicationMetrics newObject(Recycler.Handle<ReplicationMetrics> handle) {
+        protected ReplicationMetrics newObject(Recycler.Handle handle) {
             return new ReplicationMetrics(handle);
         }
     };
@@ -66,7 +66,7 @@ public class ReplicationMetrics {
         msgThroughputOut = -1;
         msgReplBacklog = -1;
         connected = -1;
-        recyclerHandle.recycle(this);
+        RECYCLER.recycle(this, recyclerHandle);
     }
 
     public Metrics add(String namespace, String local, String remote) {

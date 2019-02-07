@@ -19,21 +19,22 @@
 #ifndef CONSUMER_HPP_
 #define CONSUMER_HPP_
 
+#include <boost/date_time/posix_time/ptime.hpp>
 #include <iostream>
 #include <pulsar/BrokerConsumerStats.h>
 #include <pulsar/ConsumerConfiguration.h>
 #pragma GCC visibility push(default)
 
+
 namespace pulsar {
 class PulsarWrapper;
 class ConsumerImplBase;
 class PulsarFriend;
-typedef std::shared_ptr<ConsumerImplBase> ConsumerImplBasePtr;
 /**
  *
  */
 class Consumer {
-   public:
+ public:
     /**
      * Construct an uninitialized consumer object
      */
@@ -100,19 +101,6 @@ class Consumer {
     Result receive(Message& msg, int timeoutMs);
 
     /**
-     * Receive a single message
-     * <p>
-     * Retrieves a message when it will be available and completes callback with received message.
-     * </p>
-     * <p>
-     * receiveAsync() should be called subsequently once callback gets completed with received message.
-     * Else it creates <i> backlog of receive requests </i> in the application.
-     * </p>
-     * @param ReceiveCallback will be completed when message is available
-     */
-    void receiveAsync(ReceiveCallback callback);
-
-    /**
      * Acknowledge the reception of a single message.
      *
      * This method will block until an acknowledgement is sent to the broker. After
@@ -151,8 +139,7 @@ class Consumer {
      * waiting for the callback to be triggered.
      *
      * @param message the last message in the stream to acknowledge
-     * @return ResultOk if the message was successfully acknowledged. All previously delivered messages for
-     * this topic are also acknowledged.
+     * @return ResultOk if the message was successfully acknowledged. All previously delivered messages for this topic are also acknowledged.
      * @return ResultError if there was a failure
      */
     Result acknowledgeCumulative(const Message& message);
@@ -187,22 +174,17 @@ class Consumer {
     Result resumeMessageListener();
 
     /**
-     * Redelivers all the unacknowledged messages. In Failover mode, the request is ignored if the consumer is
-     * not
-     * active for the given topic. In Shared mode, the consumers messages to be redelivered are distributed
-     * across all
-     * the connected consumers. This is a non blocking call and doesn't throw an exception. In case the
-     * connection
+     * Redelivers all the unacknowledged messages. In Failover mode, the request is ignored if the consumer is not
+     * active for the given topic. In Shared mode, the consumers messages to be redelivered are distributed across all
+     * the connected consumers. This is a non blocking call and doesn't throw an exception. In case the connection
      * breaks, the messages are redelivered after reconnect.
      */
     void redeliverUnacknowledgedMessages();
 
     /**
      * Gets Consumer Stats from broker.
-     * The stats are cached for 30 seconds, if a call is made before the stats returned by the previous call
-     * expires
-     * then cached data will be returned. BrokerConsumerStats::isValid() function can be used to check if the
-     * stats are
+     * The stats are cached for 30 seconds, if a call is made before the stats returned by the previous call expires
+     * then cached data will be returned. BrokerConsumerStats::isValid() function can be used to check if the stats are
      * still valid.
      *
      * @param brokerConsumerStats - if the function returns ResultOk, this object will contain consumer stats
@@ -212,55 +194,29 @@ class Consumer {
     Result getBrokerConsumerStats(BrokerConsumerStats& brokerConsumerStats);
 
     /**
-     * Asynchronous call to gets Consumer Stats from broker.
-     * The stats are cached for 30 seconds, if a call is made before the stats returned by the previous call
-     * expires
-     * then cached data will be returned. BrokerConsumerStats::isValid() function can be used to check if the
-     * stats are
-     * still valid.
-     *
-     * @param callback - callback function to get the brokerConsumerStats,
-     *                   if result is ResultOk then the brokerConsumerStats will be populated
-     */
+    * Asynchronous call to gets Consumer Stats from broker.
+    * The stats are cached for 30 seconds, if a call is made before the stats returned by the previous call expires
+    * then cached data will be returned. BrokerConsumerStats::isValid() function can be used to check if the stats are
+    * still valid.
+    *
+    * @param callback - callback function to get the brokerConsumerStats,
+    *                   if result is ResultOk then the brokerConsumerStats will be populated
+    */
     void getBrokerConsumerStatsAsync(BrokerConsumerStatsCallback callback);
-
-    /**
-     * Reset the subscription associated with this consumer to a specific message id.
-     * The message id can either be a specific message or represent the first or last messages in the topic.
-     *
-     * Note: this operation can only be done on non-partitioned topics. For these, one can rather perform the
-     * seek() on the individual partitions.
-     *
-     * @param messageId
-     *            the message id where to reposition the subscription
-     */
-    Result seek(const MessageId& msgId);
-
-    /**
-     * Asynchronously reset the subscription associated with this consumer to a specific message id.
-     * The message id can either be a specific message or represent the first or last messages in the topic.
-     *
-     * Note: this operation can only be done on non-partitioned topics. For these, one can rather perform the
-     * seek() on the individual partitions.
-     *
-     * @param messageId
-     *            the message id where to reposition the subscription
-     */
-    virtual void seekAsync(const MessageId& msgId, ResultCallback callback);
-
-   private:
+private:
+    typedef boost::shared_ptr<ConsumerImplBase> ConsumerImplBasePtr;
     ConsumerImplBasePtr impl_;
     explicit Consumer(ConsumerImplBasePtr);
 
     friend class PulsarFriend;
     friend class PulsarWrapper;
     friend class PartitionedConsumerImpl;
-    friend class MultiTopicsConsumerImpl;
     friend class ConsumerImpl;
     friend class ClientImpl;
     friend class ConsumerTest;
 };
-}  // namespace pulsar
+
+}
 
 #pragma GCC visibility pop
 

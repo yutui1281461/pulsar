@@ -28,7 +28,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import org.apache.bookkeeper.common.util.OrderedExecutor;
+import org.apache.bookkeeper.util.OrderedSafeExecutor;
 import org.apache.pulsar.zookeeper.ZooKeeperClientFactory.SessionType;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.ZooKeeper;
@@ -51,8 +51,8 @@ public class GlobalZooKeeperCache extends ZooKeeperCache implements Closeable {
     private final ScheduledExecutorService scheduledExecutor;
 
     public GlobalZooKeeperCache(ZooKeeperClientFactory zkClientFactory, int zkSessionTimeoutMillis,
-            String globalZkConnect, OrderedExecutor orderedExecutor, ScheduledExecutorService scheduledExecutor) {
-        super(null, orderedExecutor);
+            String globalZkConnect, OrderedSafeExecutor orderedExecutor, ScheduledExecutorService scheduledExecutor) {
+        super(null, orderedExecutor, scheduledExecutor);
         this.zlClientFactory = zkClientFactory;
         this.zkSessionTimeoutMillis = zkSessionTimeoutMillis;
         this.globalZkConnect = globalZkConnect;
@@ -65,7 +65,7 @@ public class GlobalZooKeeperCache extends ZooKeeperCache implements Closeable {
 
         // Initial session creation with global ZK must work
         try {
-            ZooKeeper newSession = zkFuture.get(zkSessionTimeoutMillis, TimeUnit.MILLISECONDS);
+            ZooKeeper newSession = zkFuture.get(10, TimeUnit.SECONDS);
             // Register self as a watcher to receive notification when session expires and trigger a new session to be
             // created
             newSession.register(this);
@@ -85,8 +85,6 @@ public class GlobalZooKeeperCache extends ZooKeeperCache implements Closeable {
                 throw new IOException(e);
             }
         }
-
-        super.stop();
     }
 
     @Override

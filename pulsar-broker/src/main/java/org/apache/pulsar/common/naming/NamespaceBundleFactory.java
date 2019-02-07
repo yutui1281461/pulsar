@@ -28,8 +28,6 @@ import static org.apache.pulsar.common.policies.data.Policies.LAST_BOUNDARY;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map.Entry;
-import java.util.Optional;
 import java.util.SortedSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -52,7 +50,6 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
-import com.google.common.collect.BoundType;
 import com.google.common.collect.Range;
 import com.google.common.hash.HashFunction;
 
@@ -80,19 +77,10 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
 
             CompletableFuture<NamespaceBundles> future = new CompletableFuture<>();
             // Read the static bundle data from the policies
-            pulsar.getLocalZkCacheService().policiesCache().getWithStatAsync(path).thenAccept(result -> {
+            pulsar.getLocalZkCacheService().policiesCache().getAsync(path).thenAccept(policies -> {
                 // If no policies defined for namespace, assume 1 single bundle
-                BundlesData bundlesData = result.map(Entry::getKey).map(p -> p.bundles).orElse(null);
-                NamespaceBundles namespaceBundles = getBundles(
-                    namespace, bundlesData, result.map(Entry::getValue).map(s -> s.getVersion()).orElse(-1));
-
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("[{}] Get bundles from getLocalZkCacheService: path: {},  bundles: {}, version: {}",
-                        namespace, path,
-                        (bundlesData != null && bundlesData.boundaries != null) ? bundlesData.toString() : "null",
-                        namespaceBundles.getVersion());
-                }
-
+                BundlesData bundlesData = policies.map(p -> p.bundles).orElse(null);
+                NamespaceBundles namespaceBundles = getBundles(namespace, bundlesData);
                 future.complete(namespaceBundles);
             }).exceptionally(ex -> {
                 future.completeExceptionally(ex);
@@ -100,15 +88,6 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
             });
             return future;
         });
-
-        // local-policies have been changed which has contains namespace bundles
-        pulsar.getLocalZkCacheService().policiesCache()
-                .registerListener((String path, LocalPolicies data, Stat stat) -> {
-                    String[] paths = path.split(LOCAL_POLICIES_ROOT + "/");
-                    if (paths.length == 2) {
-                        invalidateBundleCache(NamespaceName.get(paths[1]));
-                    }
-                });
 
         if (pulsar != null && pulsar.getConfigurationCache() != null) {
             pulsar.getLocalZkCacheService().policiesCache().registerListener(this);
@@ -119,7 +98,7 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
 
     @Override
     public void onUpdate(String path, LocalPolicies data, Stat stat) {
-        final NamespaceName namespace = NamespaceName.get(getNamespaceFromPoliciesPath(path));
+        final NamespaceName namespace = new NamespaceName(getNamespaceFromPoliciesPath(path));
 
         try {
             LOG.info("Policy updated for namespace {}, refreshing the bundle cache.", namespace);
@@ -159,16 +138,6 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
         return new NamespaceBundle(nsname, hashRange, this);
     }
 
-    public NamespaceBundle getBundle(String namespace, String bundleRange) {
-        checkArgument(bundleRange.contains("_"), "Invalid bundle range");
-        String[] boundaries = bundleRange.split("_");
-        Long lowerEndpoint = Long.decode(boundaries[0]);
-        Long upperEndpoint = Long.decode(boundaries[1]);
-        Range<Long> hashRange = Range.range(lowerEndpoint, BoundType.CLOSED, upperEndpoint,
-                (upperEndpoint.equals(NamespaceBundles.FULL_UPPER_BOUND)) ? BoundType.CLOSED : BoundType.OPEN);
-        return getBundle(NamespaceName.get(namespace), hashRange);
-    }
-
     public NamespaceBundle getFullBundle(NamespaceName fqnn) throws Exception {
         return bundlesCache.synchronous().get(fqnn).getFullBundle();
     }
@@ -178,10 +147,6 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
     }
 
     public NamespaceBundles getBundles(NamespaceName nsname, BundlesData bundleData) {
-        return getBundles(nsname, bundleData, -1);
-    }
-
-    public NamespaceBundles getBundles(NamespaceName nsname, BundlesData bundleData, long version) {
         long[] partitions;
         if (bundleData == null) {
             partitions = new long[] { Long.decode(FIRST_BOUNDARY), Long.decode(LAST_BOUNDARY) };
@@ -191,7 +156,7 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
                 partitions[i] = Long.decode(bundleData.boundaries.get(i));
             }
         }
-        return new NamespaceBundles(nsname, partitions, this, version);
+        return new NamespaceBundles(nsname, partitions, this);
     }
 
     public static BundlesData getBundlesData(NamespaceBundles bundles) throws Exception {
@@ -214,9 +179,10 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
      *            split into numBundles
      * @return List of split {@link NamespaceBundle} and {@link NamespaceBundles} that contains final bundles including
      *         split bundles for a given namespace
+     * @throws Exception
      */
-    public Pair<NamespaceBundles, List<NamespaceBundle>> splitBundles(NamespaceBundle targetBundle, int numBundles) {
-        checkArgument(canSplitBundle(targetBundle), "%s bundle can't be split further", targetBundle);
+    public Pair<NamespaceBundles, List<NamespaceBundle>> splitBundles(NamespaceBundle targetBundle, int numBundles)
+            throws Exception {
         checkNotNull(targetBundle, "can't split null bundle");
         checkNotNull(targetBundle.getNamespaceObject(), "namespace must be present");
         NamespaceName nsname = targetBundle.getNamespaceObject();
@@ -227,8 +193,8 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
         final long[] partitions = new long[sourceBundle.partitions.length + (numBundles - 1)];
         int pos = 0;
         int splitPartition = -1;
-        final Range<Long> range = targetBundle.getKeyRange();
         for (int i = 0; i < lastIndex; i++) {
+            final Range<Long> range = targetBundle.getKeyRange();
             if (sourceBundle.partitions[i] == range.lowerEndpoint()
                     && (range.upperEndpoint() == sourceBundle.partitions[i + 1])) {
                 splitPartition = i;
@@ -247,8 +213,7 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
         }
         partitions[pos] = sourceBundle.partitions[lastIndex];
         if (splitPartition != -1) {
-            // keep version of sourceBundle
-            NamespaceBundles splittedNsBundles = new NamespaceBundles(nsname, partitions, this, sourceBundle.getVersion());
+            NamespaceBundles splittedNsBundles = new NamespaceBundles(nsname, partitions, this);
             List<NamespaceBundle> splittedBundles = splittedNsBundles.getBundles().subList(splitPartition,
                     (splitPartition + numBundles));
             return new ImmutablePair<NamespaceBundles, List<NamespaceBundle>>(splittedNsBundles, splittedBundles);
@@ -256,17 +221,12 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
         return null;
     }
 
-    public boolean canSplitBundle(NamespaceBundle bundle) {
-        Range<Long> range = bundle.getKeyRange();
-        return range.upperEndpoint() - range.lowerEndpoint() > 1;
-    }
-
     public static void validateFullRange(SortedSet<String> partitions) {
         checkArgument(partitions.first().equals(FIRST_BOUNDARY) && partitions.last().equals(LAST_BOUNDARY));
     }
 
-    public static NamespaceBundleFactory createFactory(PulsarService pulsar, HashFunction hashFunc) {
-        return new NamespaceBundleFactory(pulsar, hashFunc);
+    public static NamespaceBundleFactory createFactory(HashFunction hashFunc) {
+        return new NamespaceBundleFactory(null, hashFunc);
     }
 
     public static boolean isFullBundle(String bundleRange) {
@@ -294,7 +254,7 @@ public class NamespaceBundleFactory implements ZooKeeperCacheListener<LocalPolic
         i.next();
         i.next();
         // prop, cluster, namespace
-        return Joiner.on("/").join(i);
+        return Joiner.on("/").join(i.next(), i.next(), i.next());
     }
 
 }

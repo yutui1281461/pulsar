@@ -6,9 +6,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-#
+# 
 #   http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -18,6 +18,7 @@
 #
 
 # Test tools
+set (CMAKE_CXX_FLAGS "--std=c++0x ${CMAKE_CXX_FLAGS}")
 add_definitions(-D_GLIBCXX_USE_NANOSLEEP)
 
 set(PERF_PRODUCER_SOURCES
@@ -31,5 +32,5 @@ set(PERF_CONSUMER_SOURCES
 add_executable(perfProducer ${PERF_PRODUCER_SOURCES})
 add_executable(perfConsumer ${PERF_CONSUMER_SOURCES})
 
-target_link_libraries(perfProducer pulsarShared ${CLIENT_LIBS})
-target_link_libraries(perfConsumer pulsarShared ${CLIENT_LIBS})
+target_link_libraries(perfProducer ${CLIENT_LIBS})
+target_link_libraries(perfConsumer ${CLIENT_LIBS})

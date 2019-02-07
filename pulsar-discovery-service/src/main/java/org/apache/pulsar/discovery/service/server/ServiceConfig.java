@@ -18,11 +18,9 @@
  */
 package org.apache.pulsar.discovery.service.server;
 
-import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 
-import org.apache.pulsar.broker.authorization.PulsarAuthorizationProvider;
 import org.apache.pulsar.common.configuration.PulsarConfiguration;
 import org.apache.pulsar.discovery.service.web.DiscoveryServiceServlet;
 
@@ -37,22 +35,19 @@ public class ServiceConfig implements PulsarConfiguration {
     // Local-Zookeeper quorum connection string
     private String zookeeperServers;
     // Global-Zookeeper quorum connection string
-    @Deprecated
     private String globalZookeeperServers;
-    // Configuration Store connection string
-    private String configurationStoreServers;
 
     // ZooKeeper session timeout
     private int zookeeperSessionTimeoutMs = 30_000;
 
     // Port to use to server binary-proto request
-    private Integer servicePort = 5000;
+    private int servicePort = 5000;
     // Port to use to server binary-proto-tls request
-    private Integer servicePortTls;
+    private int servicePortTls = 5001;
     // Port to use to server HTTP request
-    private Integer webServicePort = 8080;
+    private int webServicePort = 8080;
     // Port to use to server HTTPS request
-    private Integer webServicePortTls;
+    private int webServicePortTls = 8443;
     // Control whether to bind directly on localhost rather than on normal
     // hostname
     private boolean bindOnLocalhost = false;
@@ -72,11 +67,9 @@ public class ServiceConfig implements PulsarConfiguration {
     private Set<String> authenticationProviders = Sets.newTreeSet();
     // Enforce authorization
     private boolean authorizationEnabled = false;
-    // Authorization provider fully qualified class-name
-    private String authorizationProvider = PulsarAuthorizationProvider.class.getName();
 
     /***** --- TLS --- ****/
-    @Deprecated
+    // Enable TLS
     private boolean tlsEnabled = false;
     // Path for the TLS certificate file
     private String tlsCertificateFilePath;
@@ -86,15 +79,6 @@ public class ServiceConfig implements PulsarConfiguration {
     private String tlsTrustCertsFilePath = "";
     // Accept untrusted TLS certificate from client
     private boolean tlsAllowInsecureConnection = false;
-    // Specify the tls protocols the broker will use to negotiate during TLS Handshake.
-    // Example:- [TLSv1.2, TLSv1.1, TLSv1]
-    private Set<String> tlsProtocols = Sets.newTreeSet();
-    // Specify the tls cipher the broker will use to negotiate during TLS Handshake.
-    // Example:- [TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256]
-    private Set<String> tlsCiphers = Sets.newTreeSet();
-    // Specify whether Client certificates are required for TLS
-    // Reject the Connection if the Client Certificate is not trusted.
-    private boolean tlsRequireTrustedClientCertOnConnect = false;
 
     private Properties properties = new Properties();
 
@@ -106,22 +90,12 @@ public class ServiceConfig implements PulsarConfiguration {
         this.zookeeperServers = zookeeperServers;
     }
 
-    @Deprecated
     public String getGlobalZookeeperServers() {
         return globalZookeeperServers;
     }
 
-    @Deprecated
     public void setGlobalZookeeperServers(String globalZookeeperServers) {
         this.globalZookeeperServers = globalZookeeperServers;
-    }
-
-    public String getConfigurationStoreServers() {
-        return null == configurationStoreServers ? getGlobalZookeeperServers() : configurationStoreServers;
-    }
-
-    public void setConfigurationStoreServers(String configurationStoreServers) {
-        this.configurationStoreServers = configurationStoreServers;
     }
 
     public int getZookeeperSessionTimeoutMs() {
@@ -132,44 +106,42 @@ public class ServiceConfig implements PulsarConfiguration {
         this.zookeeperSessionTimeoutMs = zookeeperSessionTimeoutMs;
     }
 
-    public Optional<Integer> getServicePort() {
-        return Optional.ofNullable(servicePort);
+    public int getServicePort() {
+        return servicePort;
     }
 
     public void setServicePort(int servicePort) {
         this.servicePort = servicePort;
     }
 
-    public Optional<Integer> getServicePortTls() {
-        return Optional.ofNullable(servicePortTls);
+    public int getServicePortTls() {
+        return servicePortTls;
     }
 
     public void setServicePortTls(int servicePortTls) {
         this.servicePortTls = servicePortTls;
     }
 
-    public Optional<Integer> getWebServicePort() {
-        return Optional.ofNullable(webServicePort);
+    public int getWebServicePort() {
+        return webServicePort;
     }
 
     public void setWebServicePort(int webServicePort) {
         this.webServicePort = webServicePort;
     }
 
-    public Optional<Integer> getWebServicePortTls() {
-        return Optional.ofNullable(webServicePortTls);
+    public int getWebServicePortTls() {
+        return webServicePortTls;
     }
 
     public void setWebServicePortTls(int webServicePortTls) {
         this.webServicePortTls = webServicePortTls;
     }
 
-    @Deprecated
     public boolean isTlsEnabled() {
-        return tlsEnabled || webServicePortTls != null || servicePortTls != null;
+        return tlsEnabled;
     }
 
-    @Deprecated
     public void setTlsEnabled(boolean tlsEnabled) {
         this.tlsEnabled = tlsEnabled;
     }
@@ -238,14 +210,6 @@ public class ServiceConfig implements PulsarConfiguration {
         this.authorizationEnabled = authorizationEnabled;
     }
 
-    public String getAuthorizationProvider() {
-        return authorizationProvider;
-    }
-
-    public void setAuthorizationProvider(String authorizationProvider) {
-        this.authorizationProvider = authorizationProvider;
-    }
-
     public Set<String> getSuperUserRoles() {
         return superUserRoles;
     }
@@ -268,29 +232,5 @@ public class ServiceConfig implements PulsarConfiguration {
 
     public void setProperties(Properties properties) {
         this.properties = properties;
-    }
-
-    public Set<String> getTlsProtocols() {
-        return tlsProtocols;
-    }
-
-    public void setTlsProtocols(Set<String> tlsProtocols) {
-        this.tlsProtocols = tlsProtocols;
-    }
-
-    public Set<String> getTlsCiphers() {
-        return tlsCiphers;
-    }
-
-    public void setTlsCiphers(Set<String> tlsCiphers) {
-        this.tlsCiphers = tlsCiphers;
-    }
-
-    public boolean getTlsRequireTrustedClientCertOnConnect() {
-        return tlsRequireTrustedClientCertOnConnect;
-    }
-
-    public void setTlsRequireTrustedClientCertOnConnect(boolean tlsRequireTrustedClientCertOnConnect) {
-        this.tlsRequireTrustedClientCertOnConnect = tlsRequireTrustedClientCertOnConnect;
     }
 }

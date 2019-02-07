@@ -24,14 +24,11 @@ import org.apache.pulsar.client.admin.PulsarAdminException.ConflictException;
 import org.apache.pulsar.client.admin.PulsarAdminException.NotAuthorizedException;
 import org.apache.pulsar.client.admin.PulsarAdminException.NotFoundException;
 import org.apache.pulsar.client.admin.PulsarAdminException.PreconditionFailedException;
-import org.apache.pulsar.common.policies.data.TenantInfo;
+import org.apache.pulsar.common.policies.data.PropertyAdmin;
 
 /**
  * Admin interface for properties management
- *
- * @deprecated see {@link Tenants} from {@link PulsarAdmin#tenants()}
  */
-@Deprecated
 public interface Properties {
     /**
      * Get the list of properties.
@@ -68,7 +65,7 @@ public interface Properties {
      * @throws PulsarAdminException
      *             Unexpected error
      */
-    TenantInfo getPropertyAdmin(String property) throws PulsarAdminException;
+    PropertyAdmin getPropertyAdmin(String property) throws PulsarAdminException;
 
     /**
      * Create a new property.
@@ -89,7 +86,7 @@ public interface Properties {
      * @throws PulsarAdminException
      *             Unexpected error
      */
-    void createProperty(String property, TenantInfo config) throws PulsarAdminException;
+    void createProperty(String property, PropertyAdmin config) throws PulsarAdminException;
 
     /**
      * Update the admins for a property.
@@ -108,12 +105,12 @@ public interface Properties {
      * @throws PulsarAdminException
      *             Unexpected error
      */
-    void updateProperty(String property, TenantInfo config) throws PulsarAdminException;
+    void updateProperty(String property, PropertyAdmin config) throws PulsarAdminException;
 
     /**
      * Delete an existing property.
      * <p>
-     * Delete a property and all namespaces and topics under it.
+     * Delete a property and all namespaces and destinations under it.
      *
      * @param property
      *            Property name

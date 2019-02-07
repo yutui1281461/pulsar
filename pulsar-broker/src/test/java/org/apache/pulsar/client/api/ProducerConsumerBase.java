@@ -18,16 +18,17 @@
  */
 package org.apache.pulsar.client.api;
 
-import com.google.common.collect.Sets;
-
 import java.lang.reflect.Method;
 import java.util.Set;
 
 import org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest;
 import org.apache.pulsar.common.policies.data.ClusterData;
-import org.apache.pulsar.common.policies.data.TenantInfo;
+import org.apache.pulsar.common.policies.data.PropertyAdmin;
 import org.testng.Assert;
 import org.testng.annotations.BeforeMethod;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 public abstract class ProducerConsumerBase extends MockedPulsarServiceBaseTest {
     protected String methodName;
@@ -38,21 +39,14 @@ public abstract class ProducerConsumerBase extends MockedPulsarServiceBaseTest {
     }
 
     public void producerBaseSetup() throws Exception {
-        admin.clusters().createCluster("test", new ClusterData("http://127.0.0.1:" + BROKER_WEBSERVICE_PORT));
-        admin.tenants().createTenant("my-property",
-                new TenantInfo(Sets.newHashSet("appid1", "appid2"), Sets.newHashSet("test")));
-        admin.namespaces().createNamespace("my-property/my-ns");
-        admin.namespaces().setNamespaceReplicationClusters("my-property/my-ns", Sets.newHashSet("test"));
-
-        // so that clients can test short names
-        admin.tenants().createTenant("public",
-                new TenantInfo(Sets.newHashSet("appid1", "appid2"), Sets.newHashSet("test")));
-        admin.namespaces().createNamespace("public/default");
-        admin.namespaces().setNamespaceReplicationClusters("public/default", Sets.newHashSet("test"));
+        admin.clusters().createCluster("use", new ClusterData("http://127.0.0.1:" + BROKER_WEBSERVICE_PORT));
+        admin.properties().createProperty("my-property",
+                new PropertyAdmin(Lists.newArrayList("appid1", "appid2"), Sets.newHashSet("use")));
+        admin.namespaces().createNamespace("my-property/use/my-ns");
     }
 
-    protected <T> void testMessageOrderAndDuplicates(Set<T> messagesReceived, T receivedMessage,
-            T expectedMessage) {
+    protected void testMessageOrderAndDuplicates(Set<String> messagesReceived, String receivedMessage,
+            String expectedMessage) {
         // Make sure that messages are received in order
         Assert.assertEquals(receivedMessage, expectedMessage,
                 "Received message " + receivedMessage + " did not match the expected message " + expectedMessage);
@@ -60,5 +54,4 @@ public abstract class ProducerConsumerBase extends MockedPulsarServiceBaseTest {
         // Make sure that there are no duplicates
         Assert.assertTrue(messagesReceived.add(receivedMessage), "Received duplicate message " + receivedMessage);
     }
-
 }

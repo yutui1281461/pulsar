@@ -27,11 +27,17 @@ namespace pulsar {
 
 static const std::string EMPTY_STRING;
 
-Consumer::Consumer() : impl_() {}
+Consumer::Consumer()
+        : impl_() {
+}
 
-Consumer::Consumer(ConsumerImplBasePtr impl) : impl_(impl) {}
+Consumer::Consumer(ConsumerImplBasePtr impl)
+        : impl_(impl) {
+}
 
-const std::string& Consumer::getTopic() const { return impl_ != NULL ? impl_->getTopic() : EMPTY_STRING; }
+const std::string& Consumer::getTopic() const {
+    return impl_ != NULL ? impl_->getTopic() : EMPTY_STRING;
+}
 
 const std::string& Consumer::getSubscriptionName() const {
     return impl_ != NULL ? impl_->getSubscriptionName() : EMPTY_STRING;
@@ -73,16 +79,9 @@ Result Consumer::receive(Message& msg, int timeoutMs) {
     return impl_->receive(msg, timeoutMs);
 }
 
-void Consumer::receiveAsync(ReceiveCallback callback) {
-    if (!impl_) {
-        Message msg;
-        callback(ResultConsumerNotInitialized, msg);
-        return;
-    }
-    impl_->receiveAsync(callback);
+Result Consumer::acknowledge(const Message& message) {
+    return acknowledge(message.getMessageId());
 }
-
-Result Consumer::acknowledge(const Message& message) { return acknowledge(message.getMessageId()); }
 
 Result Consumer::acknowledge(const MessageId& messageId) {
     if (!impl_) {
@@ -193,30 +192,8 @@ Result Consumer::getBrokerConsumerStats(BrokerConsumerStats& brokerConsumerStats
 
 void Consumer::getBrokerConsumerStatsAsync(BrokerConsumerStatsCallback callback) {
     if (!impl_) {
-        callback(ResultConsumerNotInitialized, BrokerConsumerStats());
-        return;
+        return callback(ResultConsumerNotInitialized, BrokerConsumerStats());
     }
-    impl_->getBrokerConsumerStatsAsync(callback);
+    return impl_->getBrokerConsumerStatsAsync(callback);
 }
-
-void Consumer::seekAsync(const MessageId& msgId, ResultCallback callback) {
-    if (!impl_) {
-        callback(ResultConsumerNotInitialized);
-        return;
-    }
-    impl_->seekAsync(msgId, callback);
 }
-
-Result Consumer::seek(const MessageId& msgId) {
-    if (!impl_) {
-        return ResultConsumerNotInitialized;
-    }
-
-    Promise<bool, Result> promise;
-    impl_->seekAsync(msgId, WaitForCallback(promise));
-    Result result;
-    promise.getFuture().get(result);
-    return result;
-}
-
-}  // namespace pulsar

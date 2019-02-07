@@ -20,25 +20,20 @@
 #define PULSAR_SINGLE_PARTITION_MESSAGE_ROUTER_HEADER_
 
 #include <pulsar/MessageRoutingPolicy.h>
-#include <include/pulsar/ProducerConfiguration.h>
-#include "Hash.h"
-#include <pulsar/TopicMetadata.h>
-#include "MessageRouterBase.h"
+#include <boost/functional/hash.hpp>
 
-#pragma GCC visibility push(default)
 namespace pulsar {
 
-class SinglePartitionMessageRouter : public MessageRouterBase {
-   public:
-    SinglePartitionMessageRouter(const int partitionIndex,
-                                 ProducerConfiguration::HashingScheme hashingScheme);
-    virtual ~SinglePartitionMessageRouter();
-    virtual int getPartition(const Message& msg, const TopicMetadata& topicMetadata);
+    class SinglePartitionMessageRouter : public MessageRoutingPolicy {
+  public:
+	SinglePartitionMessageRouter(unsigned int numPartitions);
+        typedef boost::hash<std::string> StringHash;
+        virtual ~SinglePartitionMessageRouter();
+        virtual int getPartition(const Message& msg);
+    private:
+	unsigned int numPartitions_;
+	int selectedSinglePartition_;
+    };
 
-   private:
-    int selectedSinglePartition_;
-};
-
-}  // namespace pulsar
-#pragma GCC visibility pop
-#endif  // PULSAR_SINGLE_PARTITION_MESSAGE_ROUTER_HEADER_
+}
+#endif // PULSAR_SINGLE_PARTITION_MESSAGE_ROUTER_HEADER_

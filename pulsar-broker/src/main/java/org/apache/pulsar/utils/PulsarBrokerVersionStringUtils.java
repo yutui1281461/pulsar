@@ -31,8 +31,6 @@ public class PulsarBrokerVersionStringUtils {
     private static final Logger LOG = LoggerFactory.getLogger(PulsarBrokerVersionStringUtils.class);
 
     private static final String RESOURCE_NAME = "pulsar-broker-version.properties";
-    private static final String GIT_RESOURCE_NAME = "pulsar-broker-git.properties";
-
     private static final Pattern majorMinorPatchPattern = Pattern.compile("([1-9]+[0-9]*)\\.([1-9]+[0-9]*)\\.([1-9]+[0-9]*)(.*)");
 
     // If the version string does not contain a patch version, add one so the
@@ -72,11 +70,11 @@ public class PulsarBrokerVersionStringUtils {
     }
 
     /**
-     * Looks for a resource in the jar which is expected to be a java.util.PropertiesBase, then
+     * Looks for a resource in the jar which is expected to be a java.util.Properties, then
      * extract a specific property value.
      *
      * @return the property value, or null if the resource does not exist or the resource
-     *         is not a valid java.util.PropertiesBase or the resource does not contain the
+     *         is not a valid java.util.Properties or the resource does not contain the
      *         named property
      */
     private static String getPropertyFromResource(String resource, String propertyName) {
@@ -102,29 +100,5 @@ public class PulsarBrokerVersionStringUtils {
 
     public static String getNormalizedVersionString() {
         return fixVersionString(getPropertyFromResource(RESOURCE_NAME, "version"));
-    }
-
-    public static String getGitSha() {
-        String commit = getPropertyFromResource(GIT_RESOURCE_NAME, "git.commit.id");
-        String dirtyString = getPropertyFromResource(GIT_RESOURCE_NAME, "git.dirty");
-        if (dirtyString == null || Boolean.valueOf(dirtyString)) {
-            return commit + "(dirty)";
-        } else {
-            return commit;
-        }
-    }
-
-    public static String getBuildUser() {
-        String email = getPropertyFromResource(GIT_RESOURCE_NAME, "git.build.user.email");
-        String name = getPropertyFromResource(GIT_RESOURCE_NAME, "git.build.user.name");
-        return String.format("%s <%s>", name, email);
-    }
-
-    public static String getBuildHost() {
-        return getPropertyFromResource(GIT_RESOURCE_NAME, "git.build.host");
-    }
-
-    public static String getBuildTime() {
-        return getPropertyFromResource(GIT_RESOURCE_NAME, "git.build.time");
     }
 }

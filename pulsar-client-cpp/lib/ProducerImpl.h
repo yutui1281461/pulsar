@@ -19,27 +19,26 @@
 #ifndef LIB_PRODUCERIMPL_H_
 #define LIB_PRODUCERIMPL_H_
 
-#include <mutex>
+#include <boost/thread/mutex.hpp>
 #include <boost/date_time/posix_time/ptime.hpp>
+
+
 
 #include "ClientImpl.h"
 #include "BlockingQueue.h"
 #include "HandlerBase.h"
 #include "SharedBuffer.h"
 #include "CompressionCodec.h"
-#include "MessageCrypto.h"
 #include "stats/ProducerStatsDisabled.h"
 #include "stats/ProducerStatsImpl.h"
 
 using namespace pulsar;
 
 namespace pulsar {
-typedef bool bool_type;
 
 class BatchMessageContainer;
 
-typedef std::shared_ptr<BatchMessageContainer> BatchMessageContainerPtr;
-typedef std::shared_ptr<MessageCrypto> MessageCryptoPtr;
+typedef boost::shared_ptr<BatchMessageContainer> BatchMessageContainerPtr;
 
 class PulsarFriend;
 
@@ -51,14 +50,13 @@ struct OpSendMsg {
     boost::posix_time::ptime timeout_;
 
     OpSendMsg();
-    OpSendMsg(uint64_t producerId, uint64_t sequenceId, const Message& msg, const SendCallback& sendCallback,
-              const ProducerConfiguration& conf);
+    OpSendMsg(uint64_t producerId, uint64_t sequenceId, const Message& msg,
+              const SendCallback& sendCallback, const ProducerConfiguration& conf);
 };
 
-class ProducerImpl : public HandlerBase,
-                     public std::enable_shared_from_this<ProducerImpl>,
-                     public ProducerImplBase {
-   public:
+class ProducerImpl : public HandlerBase, public boost::enable_shared_from_this<ProducerImpl>, public ProducerImplBase {
+ public:
+
     ProducerImpl(ClientImplPtr client, const std::string& topic,
                  const ProducerConfiguration& producerConfiguration);
     ~ProducerImpl();
@@ -77,30 +75,20 @@ class ProducerImpl : public HandlerBase,
 
     virtual void disconnectProducer();
 
-    const std::string& getProducerName() const;
-
-    int64_t getLastSequenceId() const;
-
-    const std::string& getSchemaVersion() const;
-
     uint64_t getProducerId() const;
 
     virtual void start();
 
     virtual void shutdown();
 
-    virtual bool isClosed();
+    bool isClosed();
 
-    virtual void triggerFlush();
-
-    virtual void flushAsync(FlushCallback callback);
-
-   protected:
+ protected:
     ProducerStatsBasePtr producerStatsBasePtr_;
 
     typedef BlockingQueue<OpSendMsg> MessageQueue;
 
-    void setMessageMetadata(const Message& msg, const uint64_t& sequenceId, const uint32_t& uncompressedSize);
+    void setMessageMetadata(const Message &msg, const uint64_t& sequenceId, const uint32_t& uncompressedSize);
 
     void sendMessage(const Message& msg, SendCallback callback);
 
@@ -113,27 +101,25 @@ class ProducerImpl : public HandlerBase,
     virtual void connectionOpened(const ClientConnectionPtr& connection);
     virtual void connectionFailed(Result result);
 
-    virtual HandlerBaseWeakPtr get_weak_from_this() { return shared_from_this(); }
+    virtual HandlerBaseWeakPtr get_weak_from_this() {
+        return shared_from_this();
+    }
 
     const std::string& getName() const;
 
-   private:
+ private:
     void printStats();
 
     void handleCreateProducer(const ClientConnectionPtr& cnx, Result result,
-                              const ResponseData& responseData);
+                              const std::string& producerName);
 
-    void statsCallBackHandler(Result, const Message&, SendCallback, boost::posix_time::ptime);
+    void statsCallBackHandler(Result , const Message& , SendCallback , boost::posix_time::ptime );
 
     void handleClose(Result result, ResultCallback callback);
 
     void resendMessages(ClientConnectionPtr cnx);
 
-    void refreshEncryptionKey(const boost::system::error_code& ec);
-    bool encryptMessage(proto::MessageMetadata& metadata, SharedBuffer& payload,
-                        SharedBuffer& encryptedPayload);
-
-    typedef std::unique_lock<std::mutex> Lock;
+    typedef boost::unique_lock<boost::mutex> Lock;
 
     ProducerConfiguration conf_;
 
@@ -144,29 +130,21 @@ class ProducerImpl : public HandlerBase,
     std::string producerName_;
     std::string producerStr_;
     uint64_t producerId_;
-    int64_t msgSequenceGenerator_;
+    uint64_t msgSequenceGenerator_;
     proto::BaseCommand cmd_;
     BatchMessageContainerPtr batchMessageContainer;
 
-    volatile int64_t lastSequenceIdPublished_;
-    std::string schemaVersion_;
-
-    typedef std::shared_ptr<boost::asio::deadline_timer> TimerPtr;
+    typedef boost::shared_ptr<boost::asio::deadline_timer> TimerPtr;
     TimerPtr sendTimer_;
     void handleSendTimeout(const boost::system::error_code& err);
 
     Promise<Result, ProducerImplBaseWeakPtr> producerCreatedPromise_;
 
     void failPendingMessages(Result result);
-
-    MessageCryptoPtr msgCrypto_;
-    DeadlineTimerPtr dataKeyGenTImer_;
-    uint32_t dataKeyGenIntervalSec_;
-    std::shared_ptr<Promise<Result, bool_type>> flushPromise_;
 };
 
 struct ProducerImplCmp {
-    bool operator()(const ProducerImplPtr& a, const ProducerImplPtr& b) const;
+    bool operator()(const ProducerImplPtr &a, const ProducerImplPtr &b) const;
 };
 
 } /* namespace pulsar */

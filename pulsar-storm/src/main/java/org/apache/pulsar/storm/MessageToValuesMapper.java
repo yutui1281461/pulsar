@@ -22,8 +22,8 @@ import java.io.Serializable;
 
 import org.apache.pulsar.client.api.Message;
 
-import org.apache.storm.topology.OutputFieldsDeclarer;
-import org.apache.storm.tuple.Values;
+import backtype.storm.topology.OutputFieldsDeclarer;
+import backtype.storm.tuple.Values;
 
 public interface MessageToValuesMapper extends Serializable {
 
@@ -33,7 +33,7 @@ public interface MessageToValuesMapper extends Serializable {
      * @param msg
      * @return
      */
-    public Values toValues(Message<byte[]> msg);
+    public Values toValues(Message msg);
 
     /**
      * Declare the output schema for the spout.

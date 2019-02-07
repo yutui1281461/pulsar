@@ -2,34 +2,13 @@
 title: Pulsar geo-replication
 ---
 
-<!--
-
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
-
--->
-
 *Geo-replication* is the replication of persistently stored message data across multiple {% popover clusters %} of a Pulsar {% popover instance %}.
 
 ## How it works
 
 The diagram below illustrates the process of geo-replication across Pulsar clusters:
 
-![Replication Diagram](/img/GeoReplication.png)
+![Replication Diagram]({{ site.baseurl }}img/GeoReplication.png)
 
 In this diagram, whenever producers **P1**, **P2**, and **P3** publish messages to the topic **T1** on clusters **Cluster-A**, **Cluster-B**, and **Cluster-C**, respectively, those messages are instantly replicated across clusters. Once replicated, consumers **C1** and **C2** can consume those messages from their respective clusters.
 
@@ -41,7 +20,7 @@ Geo-replication must be enabled on a per-{% popover property %} basis in Pulsar.
 
 Although geo-replication must be enabled between two clusters, it's actually managed at the {% popover namespace %} level. You must do the following to enable geo-replication for a namespace:
 
-* [Create a global namespace](#creating-global-namespaces)
+* [Create a global namespace](#creating-a-global-namespace)
 * Configure that namespace to replicate between two or more provisioned clusters
 
 Any message published on *any* topic in that namespace will then be replicated to all clusters in the specified set.
@@ -105,22 +84,19 @@ Once you've created a global namespace, any topics that producers or consumers c
 
 By default, messages are replicated to all clusters configured for the namespace. You can restrict replication selectively by specifying a replication list for a message. That message will then be replicated only to the subset in the replication list.
 
-Below is an example for the [Java API](../../clients/Java). Note the use of the `setReplicationClusters` method when constructing the {% javadoc Message client org.apache.pulsar.client.api.Message %} object:
+Below is an example for the [Java API](../../applications/JavaClient). Note the use of the `setReplicationClusters` method when constructing the {% javadoc Message client com.yahoo.pulsar.client.api.Message %} object:
 
 ```java
-List<String> restrictReplicationTo = Arrays.asList(
-        "us-west",
-        "us-east"
-);
+List<String> restrictReplicationTo = new ArrayList<>;
+restrictReplicationTo.add("us-west");
+restrictReplicationTo.add("us-east");
 
-Producer producer = client.newProducer()
-        .topic("some-topic")
-        .create();
-
-producer.newMessage()
-        .value("my-payload".getBytes())
+Message message = MessageBuilder.create()
+        .setContent("my-payload".getBytes())
         .setReplicationClusters(restrictReplicationTo)
-        .send();
+        .build();
+
+producer.send(message);
 ```
 
 #### Topic stats
@@ -137,8 +113,6 @@ Each cluster reports its own local stats, including incoming and outgoing replic
 
 Given that global topics exist in multiple regions, it's not possible to directly delete a global topic. Instead, you should rely on automatic topic garbage collection.
 
-In Pulsar, a topic is automatically deleted when it's no longer used, that is to say, when no producers or consumers are connected *and* there are no subscriptions *and* no more messages are kept for retention. For global topics, each region will use a fault-tolerant mechanism to decide when it's safe to delete the topic locally.
-
-You can explicitly disable topic garbage collection by setting `brokerDeleteInactiveTopicsEnabled` to `false` in your [broker configuration](../../reference/Configuration/#Broker-ckhlfn).
+In Pulsar, a topic is automatically deleted when it's no longer used, that is to say, when no producers or consumers are connected *and* there are no subscriptions. For global topics, each region will use a fault-tolerant mechanism to decide when it's safe to delete the topic locally.
 
 To delete a global topic, close all producers and consumers on the topic and delete all its local subscriptions in every replication cluster. When Pulsar determines that no valid subscription for the topic remains across the system, it will garbage collect the topic.

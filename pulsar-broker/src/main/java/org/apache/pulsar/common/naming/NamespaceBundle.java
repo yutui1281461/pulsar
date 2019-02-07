@@ -22,7 +22,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
-import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.naming.DestinationName;
 import org.apache.pulsar.common.naming.NamespaceBundle;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.ServiceUnitId;
@@ -35,9 +35,6 @@ public class NamespaceBundle implements ServiceUnitId, Comparable<NamespaceBundl
     private final NamespaceName nsname;
     private final Range<Long> keyRange;
     private final NamespaceBundleFactory factory;
-    // Issue#596: remove this once we remove broker persistent/non-persistent mode configuration
-    // it is used by load-manager while considering bundle ownership
-    private boolean hasNonPersistentTopic = false;
 
     public NamespaceBundle(NamespaceName nsname, Range<Long> keyRange, NamespaceBundleFactory factory) {
         this.nsname = checkNotNull(nsname);
@@ -77,7 +74,7 @@ public class NamespaceBundle implements ServiceUnitId, Comparable<NamespaceBundl
 
         try {
             /**
-             * <code>Range.intersection()</code> will throw <code>IllegalArgumentException</code> when two ranges are
+             * <code>Range.insersection()</code> will throw <code>IllegalArgumentException</code> when two ranges are
              * not connected at all, which is a OK case for our comparison. <code>checkState</code> here is to ensure
              * that the two ranges we are comparing don't have overlaps.
              */
@@ -108,11 +105,11 @@ public class NamespaceBundle implements ServiceUnitId, Comparable<NamespaceBundl
     }
 
     @Override
-    public boolean includes(TopicName topicName) {
-        if (!this.nsname.equals(topicName.getNamespaceObject())) {
+    public boolean includes(DestinationName dn) {
+        if (!this.nsname.equals(dn.getNamespaceObject())) {
             return false;
         }
-        return this.keyRange.contains(factory.getLongHashCode(topicName.toString()));
+        return this.keyRange.contains(factory.getLongHashCode(dn.toString()));
     }
 
     public String getBundleRange() {
@@ -133,14 +130,6 @@ public class NamespaceBundle implements ServiceUnitId, Comparable<NamespaceBundl
 
     Long getUpperEndpoint() {
         return this.keyRange.upperEndpoint();
-    }
-    
-    public boolean hasNonPersistentTopic() {
-        return hasNonPersistentTopic;
-    }
-
-    public void setHasNonPersistentTopic(boolean hasNonPersistentTopic) {
-        this.hasNonPersistentTopic = hasNonPersistentTopic;
     }
 
     public static String getBundleRange(String namespaceBundle) {

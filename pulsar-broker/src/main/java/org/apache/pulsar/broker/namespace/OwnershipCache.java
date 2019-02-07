@@ -18,6 +18,8 @@
  */
 package org.apache.pulsar.broker.namespace;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -27,10 +29,10 @@ import java.util.concurrent.Executor;
 
 import org.apache.bookkeeper.util.ZkUtils;
 import org.apache.pulsar.broker.PulsarService;
+import org.apache.pulsar.client.util.FutureUtil;
 import org.apache.pulsar.common.naming.NamespaceBundle;
 import org.apache.pulsar.common.naming.NamespaceBundleFactory;
 import org.apache.pulsar.common.naming.NamespaceBundles;
-import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.apache.pulsar.zookeeper.ZooKeeperCache;
 import org.apache.pulsar.zookeeper.ZooKeeperDataCache;
@@ -45,6 +47,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
+import com.github.benmanes.caffeine.cache.RemovalListener;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.MoreExecutors;
 
@@ -159,7 +163,7 @@ public class OwnershipCache {
         this.localZkCache = pulsar.getLocalZkCache();
         this.ownershipReadOnlyCache = pulsar.getLocalZkCacheService().ownerInfoCache();
         // ownedBundlesCache contains all namespaces that are owned by the local broker
-        this.ownedBundlesCache = Caffeine.newBuilder().executor(MoreExecutors.directExecutor())
+        this.ownedBundlesCache = Caffeine.newBuilder().executor(MoreExecutors.sameThreadExecutor())
                 .buildAsync(new OwnedServiceUnitCacheLoader());
     }
 

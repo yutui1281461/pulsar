@@ -18,7 +18,6 @@
  */
 package org.apache.pulsar.discovery.service;
 
-import com.google.common.base.Preconditions;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.Closeable;
@@ -27,9 +26,8 @@ import java.net.InetAddress;
 
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.broker.authentication.AuthenticationService;
-import org.apache.pulsar.broker.authorization.AuthorizationService;
+import org.apache.pulsar.broker.authorization.AuthorizationManager;
 import org.apache.pulsar.broker.cache.ConfigurationCacheService;
-import org.apache.pulsar.common.configuration.PulsarConfigurationLoader;
 import org.apache.pulsar.common.util.netty.EventLoopUtil;
 import org.apache.pulsar.discovery.service.server.ServiceConfig;
 import org.apache.pulsar.zookeeper.ZooKeeperClientFactory;
@@ -56,7 +54,7 @@ public class DiscoveryService implements Closeable {
     private final String serviceUrlTls;
     private ConfigurationCacheService configurationCacheService;
     private AuthenticationService authenticationService;
-    private AuthorizationService authorizationService;
+    private AuthorizationManager authorizationManager;
     private ZooKeeperClientFactory zkClientFactory = null;
     private BrokerDiscoveryProvider discoveryProvider;
     private final EventLoopGroup acceptorGroup;
@@ -81,9 +79,9 @@ public class DiscoveryService implements Closeable {
     public void start() throws Exception {
         discoveryProvider = new BrokerDiscoveryProvider(this.config, getZooKeeperClientFactory());
         this.configurationCacheService = new ConfigurationCacheService(discoveryProvider.globalZkCache);
-        ServiceConfiguration serviceConfiguration = PulsarConfigurationLoader.convertFrom(config);
+        ServiceConfiguration serviceConfiguration = createServiceConfiguration(config);
         authenticationService = new AuthenticationService(serviceConfiguration);
-        authorizationService = new AuthorizationService(serviceConfiguration, configurationCacheService);
+        authorizationManager = new AuthorizationManager(serviceConfiguration, configurationCacheService);
         startServer();
     }
 
@@ -105,23 +103,15 @@ public class DiscoveryService implements Closeable {
 
         bootstrap.childHandler(new ServiceChannelInitializer(this, config, false));
         // Bind and start to accept incoming connections.
-        
-        Preconditions.checkArgument(config.getServicePort().isPresent() || config.getServicePortTls().isPresent(), 
-                "Either ServicePort or ServicePortTls should be configured.");
-        
-        if (config.getServicePort().isPresent()) {
-            // Bind and start to accept incoming connections.
-            bootstrap.bind(config.getServicePort().get()).sync();
-            LOG.info("Started Pulsar Discovery service on port {}", config.getServicePort());
-        }
-        
-        if (config.getServicePortTls().isPresent()) {
+        bootstrap.bind(config.getServicePort()).sync();
+        LOG.info("Started Pulsar Broker service on port {}", config.getWebServicePort());
+
+        if (config.isTlsEnabled()) {
             ServerBootstrap tlsBootstrap = bootstrap.clone();
             tlsBootstrap.childHandler(new ServiceChannelInitializer(this, config, true));
-            tlsBootstrap.bind(config.getServicePortTls().get()).sync();
-            LOG.info("Started Pulsar Discovery TLS service on port {}", config.getServicePortTls().get());
+            tlsBootstrap.bind(config.getServicePortTls()).sync();
+            LOG.info("Started Pulsar Broker TLS service on port {}", config.getWebServicePortTls());
         }
-        
     }
 
     public ZooKeeperClientFactory getZooKeeperClientFactory() {
@@ -140,6 +130,16 @@ public class DiscoveryService implements Closeable {
         discoveryProvider.close();
         acceptorGroup.shutdownGracefully();
         workerGroup.shutdownGracefully();
+    }
+
+    private ServiceConfiguration createServiceConfiguration(ServiceConfig config) {
+        ServiceConfiguration serviceConfiguration = new ServiceConfiguration();
+        serviceConfiguration.setAuthenticationEnabled(config.isAuthenticationEnabled());
+        serviceConfiguration.setAuthorizationEnabled(config.isAuthorizationEnabled());
+        serviceConfiguration.setAuthenticationProviders(config.getAuthenticationProviders());
+        serviceConfiguration.setAuthorizationAllowWildcardsMatching(config.getAuthorizationAllowWildcardsMatching());
+        serviceConfiguration.setProperties(config.getProperties());
+        return serviceConfiguration;
     }
 
     /**
@@ -162,20 +162,15 @@ public class DiscoveryService implements Closeable {
     }
 
     public String serviceUrl() {
-        if (config.getServicePort().isPresent()) {
-            return new StringBuilder("pulsar://").append(host()).append(":").append(config.getServicePort().get())
-                    .toString();
-        } else {
-            return null;
-        }
+        return new StringBuilder("pulsar://").append(host()).append(":").append(config.getServicePort()).toString();
     }
 
     public String serviceUrlTls() {
-        if (config.getServicePortTls().isPresent()) {
-            return new StringBuilder("pulsar+ssl://").append(host()).append(":").append(config.getServicePortTls().get())
+        if (config.isTlsEnabled()) {
+            return new StringBuilder("pulsar://").append(host()).append(":").append(config.getServicePortTls())
                     .toString();
         } else {
-            return null;
+            return "";
         }
     }
 
@@ -195,8 +190,8 @@ public class DiscoveryService implements Closeable {
         return authenticationService;
     }
 
-    public AuthorizationService getAuthorizationService() {
-        return authorizationService;
+    public AuthorizationManager getAuthorizationManager() {
+        return authorizationManager;
     }
 
     public ConfigurationCacheService getConfigurationCacheService() {

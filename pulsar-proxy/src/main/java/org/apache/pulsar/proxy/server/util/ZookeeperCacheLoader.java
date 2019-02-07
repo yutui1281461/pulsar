@@ -19,25 +19,26 @@
 package org.apache.pulsar.proxy.server.util;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
-import org.apache.bookkeeper.common.util.OrderedScheduler;
+import org.apache.bookkeeper.util.OrderedSafeExecutor;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
-import org.apache.pulsar.policies.data.loadbalancer.LoadManagerReport;
+import org.apache.pulsar.policies.data.loadbalancer.LoadReport;
+import org.apache.pulsar.policies.data.loadbalancer.ServiceLookupData;
 import org.apache.pulsar.zookeeper.LocalZooKeeperCache;
+import org.apache.pulsar.zookeeper.LocalZooKeeperConnectionService;
 import org.apache.pulsar.zookeeper.ZooKeeperCache;
 import org.apache.pulsar.zookeeper.ZooKeeperChildrenCache;
 import org.apache.pulsar.zookeeper.ZooKeeperClientFactory;
-import org.apache.pulsar.zookeeper.ZooKeeperClientFactory.SessionType;
 import org.apache.pulsar.zookeeper.ZooKeeperDataCache;
-import org.apache.zookeeper.KeeperException.NoNodeException;
-import org.apache.zookeeper.ZooKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 /**
  * Connects with ZooKeeper and sets watch to listen changes for active broker list.
@@ -45,15 +46,18 @@ import org.slf4j.LoggerFactory;
  */
 public class ZookeeperCacheLoader implements Closeable {
 
-    private final ZooKeeper zkClient;
     private final ZooKeeperCache localZkCache;
-    private final ZooKeeperDataCache<LoadManagerReport> brokerInfo;
+    private final LocalZooKeeperConnectionService localZkConnectionSvc;
+
+    private final ZooKeeperDataCache<LoadReport> brokerInfo;
     private final ZooKeeperChildrenCache availableBrokersCache;
 
-    private volatile List<LoadManagerReport> availableBrokers;
+    private volatile Set<String> availableBrokersSet;
+    private volatile List<ServiceLookupData> availableBrokers;
 
-    private final OrderedScheduler orderedExecutor = OrderedScheduler.newSchedulerBuilder().numThreads(8)
-            .name("pulsar-discovery-ordered-cache").build();
+    private final OrderedSafeExecutor orderedExecutor = new OrderedSafeExecutor(8, "pulsar-discovery-ordered-cache");
+    private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(8,
+            new DefaultThreadFactory("pulsar-discovery-cache"));
 
     public static final String LOADBALANCE_BROKERS_ROOT = "/loadbalance/brokers";
 
@@ -63,14 +67,28 @@ public class ZookeeperCacheLoader implements Closeable {
      * @param zookeeperServers
      * @throws Exception
      */
-    public ZookeeperCacheLoader(ZooKeeperClientFactory factory, String zookeeperServers, int zookeeperSessionTimeoutMs) throws Exception {
-        this.zkClient = factory.create(zookeeperServers, SessionType.AllowReadOnly, zookeeperSessionTimeoutMs).get();
-        this.localZkCache = new LocalZooKeeperCache(zkClient, this.orderedExecutor);
+    public ZookeeperCacheLoader(ZooKeeperClientFactory zkClientFactory, String zookeeperServers,
+            int zookeeperSessionTimeoutMs) throws Exception {
+        localZkConnectionSvc = new LocalZooKeeperConnectionService(zkClientFactory, zookeeperServers,
+                zookeeperSessionTimeoutMs);
+        localZkConnectionSvc.start(exitCode -> {
+            log.error("Shutting down ZK sessions: {}", exitCode);
+        });
 
-        this.brokerInfo = new ZooKeeperDataCache<LoadManagerReport>(localZkCache) {
+        this.localZkCache = new LocalZooKeeperCache(localZkConnectionSvc.getLocalZooKeeper(), this.orderedExecutor,
+                executor);
+        localZkConnectionSvc.start(exitCode -> {
+            try {
+                localZkCache.getZooKeeper().close();
+            } catch (InterruptedException e) {
+                log.warn("Failed to shutdown ZooKeeper gracefully {}", e.getMessage(), e);
+            }
+        });
+
+        this.brokerInfo = new ZooKeeperDataCache<LoadReport>(localZkCache) {
             @Override
-            public LoadManagerReport deserialize(String key, byte[] content) throws Exception {
-                return ObjectMapperFactory.getThreadLocal().readValue(content, LoadManagerReport.class);
+            public LoadReport deserialize(String key, byte[] content) throws Exception {
+                return ObjectMapperFactory.getThreadLocal().readValue(content, LoadReport.class);
             }
         };
 
@@ -84,15 +102,16 @@ public class ZookeeperCacheLoader implements Closeable {
         });
 
         // Do initial fetch of brokers list
-        try {
-            updateBrokerList(availableBrokersCache.get());
-        } catch (NoNodeException nne) { // can happen if no broker started yet
-            updateBrokerList(Collections.emptySet());
-        }
+        availableBrokersSet = availableBrokersCache.get();
+        updateBrokerList(availableBrokersSet);
     }
 
-    public List<LoadManagerReport> getAvailableBrokers() {
+    public List<ServiceLookupData> getAvailableBrokers() {
         return availableBrokers;
+    }
+
+    public Set<String> getAvailableBrokersSet() {
+        return availableBrokersSet;
     }
 
     public ZooKeeperCache getLocalZkCache() {
@@ -100,18 +119,13 @@ public class ZookeeperCacheLoader implements Closeable {
     }
 
     @Override
-    public void close() throws IOException {
-        try {
-            zkClient.close();
-        } catch (InterruptedException e) {
-            Thread.interrupted();
-            throw new IOException(e);
-        }
+    public void close() {
         orderedExecutor.shutdown();
+        executor.shutdown();
     }
 
     private void updateBrokerList(Set<String> brokerNodes) throws Exception {
-        List<LoadManagerReport> availableBrokers = new ArrayList<>(brokerNodes.size());
+        List<ServiceLookupData> availableBrokers = new ArrayList<>(brokerNodes.size());
         for (String broker : brokerNodes) {
             availableBrokers.add(brokerInfo.get(LOADBALANCE_BROKERS_ROOT + '/' + broker).get());
         }

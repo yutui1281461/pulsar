@@ -1,60 +1,12 @@
 ---
 ---
 
-/**
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
- *
- *   http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- */
-
 @charset "utf-8";
 
 @import "variables";
 @import "mixins";
 
 @include sticky-footer;
-
-// border: 1px solid #ddd; width: 4rem; margin-right: 1.25rem;
-
-.flag {
-  margin: 0;
-  width: 4rem;
-}
-
-.codebase {
-  .card {
-    padding: .25rem;
-    margin: 0;
-
-    h2.card-title {
-      margin-top: 0 !important;
-      margin-bottom: 1.25rem;
-      font-size: 1.7rem;
-
-      i {
-        margin-left: 2rem;
-      }
-    }
-
-    section.card-text {
-      margin: 0;
-      padding: 0;
-    }
-  }
-}
 
 span.latest-badge {
   margin-left: 2rem;
@@ -94,6 +46,13 @@ span.latest-badge {
 * {
   margin: 0;
   padding: 0;
+}
+
+.codebase {
+  h2 {
+    padding: 0;
+    margin: 0;
+  }
 }
 
 button.version-btn {
@@ -271,7 +230,7 @@ article.content {
 @import "popover";
 @import "protobuf";
 @import "docs";
-@import "toc";
+@import "tocify";
 @import "syntax";
 @import "sidebar";
 @import "cli";

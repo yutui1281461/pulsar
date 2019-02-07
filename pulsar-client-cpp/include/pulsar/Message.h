@@ -22,18 +22,17 @@
 #include <map>
 #include <string>
 
-#include <memory>
-
-#include "MessageId.h"
+#include <boost/shared_ptr.hpp>
+#include "BatchMessageId.h"
 
 #pragma GCC visibility push(default)
 
 namespace pulsar {
-namespace proto {
-class CommandMessage;
-class MessageMetadata;
-class SingleMessageMetadata;
-}  // namespace proto
+    namespace proto {
+        class CommandMessage;
+        class MessageMetadata;
+        class SingleMessageMetadata;
+    }
 
 class SharedBuffer;
 class MessageBuilder;
@@ -41,7 +40,7 @@ class MessageImpl;
 class PulsarWrapper;
 
 class Message {
-   public:
+ public:
     typedef std::map<std::string, std::string> StringMap;
 
     Message();
@@ -96,8 +95,7 @@ class Message {
     /**
      * Get the unique message ID associated with this message.
      *
-     * The message id can be used to univocally refer to a message without having to keep the entire payload
-     * in memory.
+     * The message id can be used to univocally refer to a message without having to keep the entire payload in memory.
      *
      * Only messages received from the consumer will have a message id assigned.
      *
@@ -106,40 +104,26 @@ class Message {
 
     /**
      * Get the partition key for this message
-     * @return key string that is hashed to determine message's topic partition
+     * @return key string that is hashed to determine message's destination partition
      */
     const std::string& getPartitionKey() const;
     bool hasPartitionKey() const;
 
     /**
-     * Get the UTC based timestamp in milliseconds referring to when the message was published by the client
-     * producer
+     * Get the UTC based timestamp in milliseconds referring to when the message was published by the client producer
      */
     uint64_t getPublishTimestamp() const;
 
-    /**
-     * Get the event timestamp associated with this message. It is set by the client producer.
-     */
-    uint64_t getEventTimestamp() const;
-
-    /**
-     * Get the topic Name from which this message originated from
-     */
-    const std::string& getTopicName() const;
-
-   private:
-    typedef std::shared_ptr<MessageImpl> MessageImplPtr;
+  private:
+    typedef boost::shared_ptr<MessageImpl> MessageImplPtr;
     MessageImplPtr impl_;
 
     Message(MessageImplPtr& impl);
-    Message(const proto::CommandMessage& msg, proto::MessageMetadata& data, SharedBuffer& payload,
-            int32_t partition);
+    Message(const proto::CommandMessage& msg, proto::MessageMetadata& data, SharedBuffer& payload);
     /// Used for Batch Messages
-    Message(const MessageId& messageID, proto::MessageMetadata& metadata, SharedBuffer& payload,
-            proto::SingleMessageMetadata& singleMetadata, const std::string& topicName);
+    Message(const BatchMessageId& messageID, proto::MessageMetadata& metadata, SharedBuffer& payload, proto::SingleMessageMetadata& singleMetadata);
     friend class PartitionedProducerImpl;
     friend class PartitionedConsumerImpl;
-    friend class MultiTopicsConsumerImpl;
     friend class MessageBuilder;
     friend class ConsumerImpl;
     friend class ProducerImpl;
@@ -151,7 +135,8 @@ class Message {
     friend std::ostream& operator<<(std::ostream& s, const StringMap& map);
     friend std::ostream& operator<<(std::ostream& s, const Message& msg);
 };
-}  // namespace pulsar
+
+}
 
 #pragma GCC visibility pop
 #endif /* MESSAGE_HPP_ */

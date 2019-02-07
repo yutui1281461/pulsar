@@ -18,31 +18,30 @@
  */
 #include "utils.h"
 
-template<typename T>
-struct ListenerWrapper {
+struct Consumer_MessageListener {
     PyObject* _pyListener;
 
-    ListenerWrapper(py::object pyListener) :
+    Consumer_MessageListener(py::object pyListener) :
         _pyListener(pyListener.ptr()) {
         Py_XINCREF(_pyListener);
     }
 
-    ListenerWrapper(const ListenerWrapper& other) {
+    Consumer_MessageListener(const Consumer_MessageListener& other) {
         _pyListener = other._pyListener;
         Py_XINCREF(_pyListener);
     }
 
-    ListenerWrapper& operator=(const ListenerWrapper& other) {
+    Consumer_MessageListener& operator=(const Consumer_MessageListener& other) {
         _pyListener = other._pyListener;
         Py_XINCREF(_pyListener);
         return *this;
     }
 
-    virtual ~ListenerWrapper() {
+    virtual ~Consumer_MessageListener() {
         Py_XDECREF(_pyListener);
     }
 
-    void operator()(T consumer, const Message& msg) {
+    void operator()(Consumer consumer, const Message& msg) {
         PyGILState_STATE state = PyGILState_Ensure();
 
         try {
@@ -56,14 +55,8 @@ struct ListenerWrapper {
 };
 
 static ConsumerConfiguration& ConsumerConfiguration_setMessageListener(ConsumerConfiguration& conf,
-                                                                       py::object pyListener) {
-    conf.setMessageListener(ListenerWrapper<Consumer>(pyListener));
-    return conf;
-}
-
-static ReaderConfiguration& ReaderConfiguration_setReaderListener(ReaderConfiguration& conf,
-                                                                   py::object pyListener) {
-    conf.setReaderListener(ListenerWrapper<Reader>(pyListener));
+                                                                py::object pyListener) {
+    conf.setMessageListener(Consumer_MessageListener(pyListener));
     return conf;
 }
 
@@ -95,24 +88,15 @@ void export_config() {
             .def("tls_trust_certs_file_path", &ClientConfiguration::setTlsTrustCertsFilePath, return_self<>())
             .def("tls_allow_insecure_connection", &ClientConfiguration::isTlsAllowInsecureConnection)
             .def("tls_allow_insecure_connection", &ClientConfiguration::setTlsAllowInsecureConnection, return_self<>())
-            .def("tls_validate_hostname", &ClientConfiguration::setValidateHostName, return_self<>())
             ;
 
     class_<ProducerConfiguration>("ProducerConfiguration")
-            .def("producer_name", &ProducerConfiguration::getProducerName, return_value_policy<copy_const_reference>())
-            .def("producer_name", &ProducerConfiguration::setProducerName, return_self<>())
-            .def("schema", &ProducerConfiguration::getSchema, return_value_policy<copy_const_reference>())
-            .def("schema", &ProducerConfiguration::setSchema, return_self<>())
             .def("send_timeout_millis", &ProducerConfiguration::getSendTimeout)
             .def("send_timeout_millis", &ProducerConfiguration::setSendTimeout, return_self<>())
-            .def("initial_sequence_id", &ProducerConfiguration::getInitialSequenceId)
-            .def("initial_sequence_id", &ProducerConfiguration::setInitialSequenceId, return_self<>())
             .def("compression_type", &ProducerConfiguration::getCompressionType)
             .def("compression_type", &ProducerConfiguration::setCompressionType, return_self<>())
             .def("max_pending_messages", &ProducerConfiguration::getMaxPendingMessages)
             .def("max_pending_messages", &ProducerConfiguration::setMaxPendingMessages, return_self<>())
-            .def("max_pending_messages_across_partitions", &ProducerConfiguration::getMaxPendingMessagesAcrossPartitions)
-            .def("max_pending_messages_across_partitions", &ProducerConfiguration::setMaxPendingMessagesAcrossPartitions, return_self<>())
             .def("block_if_queue_full", &ProducerConfiguration::getBlockIfQueueFull)
             .def("block_if_queue_full", &ProducerConfiguration::setBlockIfQueueFull, return_self<>())
             .def("partitions_routing_mode", &ProducerConfiguration::getPartitionsRoutingMode)
@@ -125,43 +109,19 @@ void export_config() {
             .def("batching_max_allowed_size_in_bytes", &ProducerConfiguration::setBatchingMaxAllowedSizeInBytes, return_self<>())
             .def("batching_max_publish_delay_ms", &ProducerConfiguration::getBatchingMaxPublishDelayMs, return_value_policy<copy_const_reference>())
             .def("batching_max_publish_delay_ms", &ProducerConfiguration::setBatchingMaxPublishDelayMs, return_self<>())
-            .def("property", &ProducerConfiguration::setProperty, return_self<>())
             ;
 
     class_<ConsumerConfiguration>("ConsumerConfiguration")
             .def("consumer_type", &ConsumerConfiguration::getConsumerType)
             .def("consumer_type", &ConsumerConfiguration::setConsumerType, return_self<>())
-            .def("schema", &ConsumerConfiguration::getSchema, return_value_policy<copy_const_reference>())
-            .def("schema", &ConsumerConfiguration::setSchema, return_self<>())
             .def("message_listener", &ConsumerConfiguration_setMessageListener, return_self<>())
             .def("receiver_queue_size", &ConsumerConfiguration::getReceiverQueueSize)
             .def("receiver_queue_size", &ConsumerConfiguration::setReceiverQueueSize)
-            .def("max_total_receiver_queue_size_across_partitions", &ConsumerConfiguration::getMaxTotalReceiverQueueSizeAcrossPartitions)
-            .def("max_total_receiver_queue_size_across_partitions", &ConsumerConfiguration::setMaxTotalReceiverQueueSizeAcrossPartitions)
             .def("consumer_name", &ConsumerConfiguration::getConsumerName, return_value_policy<copy_const_reference>())
             .def("consumer_name", &ConsumerConfiguration::setConsumerName)
             .def("unacked_messages_timeout_ms", &ConsumerConfiguration::getUnAckedMessagesTimeoutMs)
             .def("unacked_messages_timeout_ms", &ConsumerConfiguration::setUnAckedMessagesTimeoutMs)
             .def("broker_consumer_stats_cache_time_ms", &ConsumerConfiguration::getBrokerConsumerStatsCacheTimeInMs)
             .def("broker_consumer_stats_cache_time_ms", &ConsumerConfiguration::setBrokerConsumerStatsCacheTimeInMs)
-            .def("pattern_auto_discovery_period", &ConsumerConfiguration::getPatternAutoDiscoveryPeriod)
-            .def("pattern_auto_discovery_period", &ConsumerConfiguration::setPatternAutoDiscoveryPeriod)
-            .def("read_compacted", &ConsumerConfiguration::isReadCompacted)
-            .def("read_compacted", &ConsumerConfiguration::setReadCompacted)
-            .def("property", &ConsumerConfiguration::setProperty, return_self<>())
-            ;
-
-    class_<ReaderConfiguration>("ReaderConfiguration")
-            .def("message_listener", &ReaderConfiguration_setReaderListener, return_self<>())
-            .def("schema", &ReaderConfiguration::getSchema, return_value_policy<copy_const_reference>())
-            .def("schema", &ReaderConfiguration::setSchema, return_self<>())
-            .def("receiver_queue_size", &ReaderConfiguration::getReceiverQueueSize)
-            .def("receiver_queue_size", &ReaderConfiguration::setReceiverQueueSize)
-            .def("reader_name", &ReaderConfiguration::getReaderName, return_value_policy<copy_const_reference>())
-            .def("reader_name", &ReaderConfiguration::setReaderName)
-            .def("subscription_role_prefix", &ReaderConfiguration::getSubscriptionRolePrefix, return_value_policy<copy_const_reference>())
-            .def("subscription_role_prefix", &ReaderConfiguration::setSubscriptionRolePrefix)
-            .def("read_compacted", &ReaderConfiguration::isReadCompacted)
-            .def("read_compacted", &ReaderConfiguration::setReadCompacted)
             ;
 }

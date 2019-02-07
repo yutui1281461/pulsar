@@ -19,7 +19,6 @@
 package org.apache.pulsar.testclient;
 
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
-import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 import java.io.FileInputStream;
@@ -30,7 +29,6 @@ import java.nio.file.Paths;
 import java.text.DecimalFormat;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -42,14 +40,13 @@ import java.util.concurrent.atomic.LongAdder;
 import org.HdrHistogram.Histogram;
 import org.HdrHistogram.HistogramLogWriter;
 import org.HdrHistogram.Recorder;
-import org.apache.pulsar.client.api.ClientBuilder;
+import org.apache.pulsar.client.api.ClientConfiguration;
 import org.apache.pulsar.client.api.CompressionType;
-import org.apache.pulsar.client.api.CryptoKeyReader;
-import org.apache.pulsar.client.api.EncryptionKeyInfo;
-import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.ProducerBuilder;
+import org.apache.pulsar.client.api.ProducerConfiguration;
+import org.apache.pulsar.client.api.ProducerConfiguration.MessageRoutingMode;
 import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.impl.PulsarClientImpl;
 import org.apache.pulsar.testclient.utils.PaddingDecimalFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,8 +80,8 @@ public class PerformanceProducer {
         @Parameter(names = { "--conf-file" }, description = "Configuration file")
         public String confFile;
 
-        @Parameter(description = "persistent://prop/ns/my-topic", required = true)
-        public List<String> topics;
+        @Parameter(description = "persistent://prop/cluster/ns/my-topic", required = true)
+        public List<String> destinations;
 
         @Parameter(names = { "-r", "--rate" }, description = "Publish rate msg/s across topics")
         public int msgRate = 100;
@@ -130,30 +127,14 @@ public class PerformanceProducer {
         public String payloadFilename = null;
         @Parameter(names = { "-b",
                 "--batch-time-window" }, description = "Batch messages in 'x' ms window (Default: 1ms)")
-        public double batchTimeMillis = 1.0;
+        public long batchTime = 1;
 
         @Parameter(names = { "-time",
                 "--test-duration" }, description = "Test duration in secs. If 0, it will keep publishing")
         public long testTime = 0;
-
-        @Parameter(names = "--warmup-time", description = "Warm-up time in seconds (Default: 1 sec)")
-        public double warmupTimeSeconds = 1.0;
-
-        @Parameter(names = {
-                "--trust-cert-file" }, description = "Path for the trusted TLS certificate file")
-        public String tlsTrustCertsFilePath = "";
-
-        @Parameter(names = { "-k", "--encryption-key-name" }, description = "The public key name to encrypt payload")
-        public String encKeyName = null;
-
-        @Parameter(names = { "-v",
-                "--encryption-key-value-file" }, description = "The file which contains the public key to encrypt payload")
-        public String encKeyFile = null;
-
     }
 
     public static void main(String[] args) throws Exception {
-
         final Arguments arguments = new Arguments();
         JCommander jc = new JCommander(arguments);
         jc.setProgramName("pulsar-perf-producer");
@@ -171,7 +152,7 @@ public class PerformanceProducer {
             System.exit(-1);
         }
 
-        if (arguments.topics.size() != 1) {
+        if (arguments.destinations.size() != 1) {
             System.out.println("Only one topic name is allowed");
             jc.usage();
             System.exit(-1);
@@ -201,11 +182,9 @@ public class PerformanceProducer {
             if (arguments.authParams == null) {
                 arguments.authParams = prop.getProperty("authParams", null);
             }
-
-            if (isBlank(arguments.tlsTrustCertsFilePath)) {
-               arguments.tlsTrustCertsFilePath = prop.getProperty("tlsTrustCertsFilePath", "");
-            }
         }
+
+        arguments.testTime = TimeUnit.SECONDS.toMillis(arguments.testTime);
 
         // Dump config variables
         ObjectMapper m = new ObjectMapper();
@@ -221,78 +200,44 @@ public class PerformanceProducer {
         }
 
         // Now processing command line arguments
-        String prefixTopicName = arguments.topics.get(0);
-        List<Future<Producer<byte[]>>> futures = Lists.newArrayList();
+        String prefixTopicName = arguments.destinations.get(0);
+        List<Future<Producer>> futures = Lists.newArrayList();
 
-        ClientBuilder clientBuilder = PulsarClient.builder() //
-                .serviceUrl(arguments.serviceURL) //
-                .connectionsPerBroker(arguments.maxConnections) //
-                .ioThreads(Runtime.getRuntime().availableProcessors()) //
-                .statsInterval(arguments.statsIntervalSeconds, TimeUnit.SECONDS) //
-                .tlsTrustCertsFilePath(arguments.tlsTrustCertsFilePath);
-
+        ClientConfiguration clientConf = new ClientConfiguration();
+        clientConf.setConnectionsPerBroker(arguments.maxConnections);
+        clientConf.setIoThreads(Runtime.getRuntime().availableProcessors());
+        clientConf.setStatsInterval(arguments.statsIntervalSeconds, TimeUnit.SECONDS);
         if (isNotBlank(arguments.authPluginClassName)) {
-            clientBuilder.authentication(arguments.authPluginClassName, arguments.authParams);
+            clientConf.setAuthentication(arguments.authPluginClassName, arguments.authParams);
         }
 
-        class EncKeyReader implements CryptoKeyReader {
+        PulsarClient client = new PulsarClientImpl(arguments.serviceURL, clientConf);
 
-            EncryptionKeyInfo keyInfo = new EncryptionKeyInfo();
-
-            EncKeyReader(byte[] value) {
-                keyInfo.setKey(value);
-            }
-
-            @Override
-            public EncryptionKeyInfo getPublicKey(String keyName, Map<String, String> keyMeta) {
-                if (keyName.equals(arguments.encKeyName)) {
-                    return keyInfo;
-                }
-                return null;
-            }
-
-            @Override
-            public EncryptionKeyInfo getPrivateKey(String keyName, Map<String, String> keyMeta) {
-                return null;
-            }
-        }
-        PulsarClient client = clientBuilder.build();
-        ProducerBuilder<byte[]> producerBuilder = client.newProducer() //
-                .sendTimeout(0, TimeUnit.SECONDS) //
-                .compressionType(arguments.compression) //
-                .maxPendingMessages(arguments.maxOutstanding) //
-                // enable round robin message routing if it is a partitioned topic
-                .messageRoutingMode(MessageRoutingMode.RoundRobinPartition);
-
-        if (arguments.batchTimeMillis == 0.0) {
-            producerBuilder.enableBatching(false);
-        } else {
-            long batchTimeUsec = (long) (arguments.batchTimeMillis * 1000);
-            producerBuilder.batchingMaxPublishDelay(batchTimeUsec, TimeUnit.MICROSECONDS)
-                    .enableBatching(true);
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setSendTimeout(0, TimeUnit.SECONDS);
+        producerConf.setCompressionType(arguments.compression);
+        // enable round robin message routing if it is a partitioned topic
+        producerConf.setMessageRoutingMode(MessageRoutingMode.RoundRobinPartition);
+        if (arguments.batchTime > 0) {
+            producerConf.setBatchingMaxPublishDelay(arguments.batchTime, TimeUnit.MILLISECONDS);
+            producerConf.setBatchingEnabled(true);
+            producerConf.setMaxPendingMessages(arguments.msgRate);
         }
 
         // Block if queue is full else we will start seeing errors in sendAsync
-        producerBuilder.blockIfQueueFull(true);
-
-        if (arguments.encKeyName != null) {
-            producerBuilder.addEncryptionKey(arguments.encKeyName);
-            byte[] pKey = Files.readAllBytes(Paths.get(arguments.encKeyFile));
-            EncKeyReader keyReader = new EncKeyReader(pKey);
-            producerBuilder.cryptoKeyReader(keyReader);
-        }
+        producerConf.setBlockIfQueueFull(true);
 
         for (int i = 0; i < arguments.numTopics; i++) {
             String topic = (arguments.numTopics == 1) ? prefixTopicName : String.format("%s-%d", prefixTopicName, i);
-            log.info("Adding {} publishers on topic {}", arguments.numProducers, topic);
+            log.info("Adding {} publishers on destination {}", arguments.numProducers, topic);
 
             for (int j = 0; j < arguments.numProducers; j++) {
-                futures.add(producerBuilder.clone().topic(topic).createAsync());
+                futures.add(client.createProducerAsync(topic, producerConf));
             }
         }
 
-        final List<Producer<byte[]>> producers = Lists.newArrayListWithCapacity(futures.size());
-        for (Future<Producer<byte[]>> future : futures) {
+        final List<Producer> producers = Lists.newArrayListWithCapacity(futures.size());
+        for (Future<Producer> future : futures) {
             producers.add(future.get());
         }
 
@@ -311,16 +256,14 @@ public class PerformanceProducer {
             try {
                 RateLimiter rateLimiter = RateLimiter.create(arguments.msgRate);
 
-                long startTime = System.nanoTime();
-                long warmupEndTime = startTime + (long) (arguments.warmupTimeSeconds * 1e9);
-                long testEndTime = startTime + (long) (arguments.testTime * 1e9);
+                long startTime = System.currentTimeMillis();
 
                 // Send messages on all topics/producers
                 long totalSent = 0;
                 while (true) {
-                    for (Producer<byte[]> producer : producers) {
+                    for (Producer producer : producers) {
                         if (arguments.testTime > 0) {
-                            if (System.nanoTime() > testEndTime) {
+                            if (System.currentTimeMillis() - startTime > arguments.testTime) {
                                 log.info("------------------- DONE -----------------------");
                                 printAggregatedStats();
                                 isDone.set(true);
@@ -346,12 +289,9 @@ public class PerformanceProducer {
                             messagesSent.increment();
                             bytesSent.add(payloadData.length);
 
-                            long now = System.nanoTime();
-                            if (now > warmupEndTime) {
-                                long latencyMicros = NANOSECONDS.toMicros(now - sendTime);
-                                recorder.recordValue(latencyMicros);
-                                cumulativeRecorder.recordValue(latencyMicros);
-                            }
+                            long latencyMicros = NANOSECONDS.toMicros(System.nanoTime() - sendTime);
+                            recorder.recordValue(latencyMicros);
+                            cumulativeRecorder.recordValue(latencyMicros);
                         }).exceptionally(ex -> {
                             log.warn("Write error on message", ex);
                             System.exit(-1);

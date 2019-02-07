@@ -62,11 +62,11 @@ public class BrokerOperabilityMetrics {
     }
 
     Metrics getZkWriteLatencyMetrics() {
-        return getDimensionMetrics("zk_write_latency", "zk_write", zkWriteLatencyStats);
+        return getDimensionMetrics("zk_write_latency", "zk_write_latency", zkWriteLatencyStats);
     }
 
     Metrics getZkReadLatencyMetrics() {
-        return getDimensionMetrics("zk_read_latency", "zk_read", zkReadLatencyStats);
+        return getDimensionMetrics("zk_read_latency", "zk_read_latency", zkReadLatencyStats);
     }
 
     Metrics getDimensionMetrics(String metricsName, String dimensionName, DimensionStats stats) {
@@ -90,9 +90,6 @@ public class BrokerOperabilityMetrics {
 
     public void reset() {
         metricsList.clear();
-        topicLoadStats.reset();
-        zkWriteLatencyStats.reset();
-        zkReadLatencyStats.reset();
     }
 
     public void recordTopicLoadTimeValue(long topicLoadLatencyMs) {

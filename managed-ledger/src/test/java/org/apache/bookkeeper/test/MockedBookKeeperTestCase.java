@@ -22,21 +22,19 @@ import java.lang.reflect.Method;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.apache.bookkeeper.client.PulsarMockBookKeeper;
-import org.apache.bookkeeper.common.util.OrderedScheduler;
+import org.apache.bookkeeper.client.MockBookKeeper;
 import org.apache.bookkeeper.conf.ClientConfiguration;
 import org.apache.bookkeeper.mledger.ManagedLedgerFactoryConfig;
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerFactoryImpl;
+import org.apache.bookkeeper.mledger.impl.MetaStoreImplZookeeper.ZNodeProtobufFormat;
+import org.apache.bookkeeper.util.OrderedSafeExecutor;
 import org.apache.bookkeeper.util.ZkUtils;
-import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.MockZooKeeper;
-import org.apache.zookeeper.ZooDefs;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testng.annotations.AfterClass;
 import org.testng.annotations.AfterMethod;
-import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.DataProvider;
 
 /**
  * A class runs several bookie servers for testing.
@@ -49,15 +47,17 @@ public abstract class MockedBookKeeperTestCase {
     protected MockZooKeeper zkc;
 
     // BookKeeper related variables
-    protected PulsarMockBookKeeper bkc;
+    protected MockBookKeeper bkc;
     protected int numBookies;
 
     protected ManagedLedgerFactoryImpl factory;
 
     protected ClientConfiguration baseClientConf = new ClientConfiguration();
 
-    protected OrderedScheduler executor;
+    protected OrderedSafeExecutor executor;
     protected ExecutorService cachedExecutor;
+    
+    protected ZNodeProtobufFormat protobufFormat = ZNodeProtobufFormat.Text;
 
     public MockedBookKeeperTestCase() {
         // By default start a 3 bookies cluster
@@ -66,6 +66,11 @@ public abstract class MockedBookKeeperTestCase {
 
     public MockedBookKeeperTestCase(int numBookies) {
         this.numBookies = numBookies;
+    }
+    
+    @DataProvider(name = "protobufFormat")
+    public static Object[][] protobufFormat() {
+        return new Object[][] { { ZNodeProtobufFormat.Text }, { ZNodeProtobufFormat.Binary } };
     }
 
     @BeforeMethod
@@ -79,10 +84,11 @@ public abstract class MockedBookKeeperTestCase {
             throw e;
         }
 
+        executor = new OrderedSafeExecutor(2, "test");
+        cachedExecutor = Executors.newCachedThreadPool();
         ManagedLedgerFactoryConfig conf = new ManagedLedgerFactoryConfig();
+        conf.setUseProtobufBinaryFormatInZK(protobufFormat == ZNodeProtobufFormat.Binary);
         factory = new ManagedLedgerFactoryImpl(bkc, zkc, conf);
-
-        zkc.create("/managed-ledgers", new byte[0], ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT);
     }
 
     @AfterMethod
@@ -92,19 +98,9 @@ public abstract class MockedBookKeeperTestCase {
         factory = null;
         stopBookKeeper();
         stopZooKeeper();
-        LOG.info("--------- stopped {}", method);
-    }
-
-    @BeforeClass
-    public void setUpClass() throws Exception {
-        executor = OrderedScheduler.newSchedulerBuilder().numThreads(2).name("test").build();
-        cachedExecutor = Executors.newCachedThreadPool();
-    }
-
-    @AfterClass
-    public void tearDownClass() throws Exception {
         executor.shutdown();
         cachedExecutor.shutdown();
+        LOG.info("--------- stopped {}", method);
     }
 
     /**
@@ -121,7 +117,7 @@ public abstract class MockedBookKeeperTestCase {
 
         zkc.create("/ledgers/LAYOUT", "1\nflat:1".getBytes(), null, null);
 
-        bkc = new PulsarMockBookKeeper(zkc, executor.chooseThread(this));
+        bkc = new MockBookKeeper(baseClientConf, zkc);
     }
 
     protected void stopBookKeeper() throws Exception {

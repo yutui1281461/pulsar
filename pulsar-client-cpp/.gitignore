@@ -35,20 +35,15 @@ lib*.so*
 
 # Exclude compiled executables
 /examples/SampleProducer
-/examples/SampleProducerCApi
 /examples/SampleConsumer
-/examples/SampleConsumerCApi
 /examples/SampleAsyncProducer
 /examples/SampleConsumerListener
-/examples/SampleConsumerListenerCApi
-/examples/SampleReaderCApi
 /tests/main
 /perf/perfProducer
 /perf/perfConsumer
 /system-test/SystemTest
 
 # IDE generated files
-.csettings
 .cproject
 .project
 .settings/
@@ -68,5 +63,3 @@ Makefile
 cmake_install.cmake
 CMakeFiles
 CMakeCache.txt
-
-pulsar-dist

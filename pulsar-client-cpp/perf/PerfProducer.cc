@@ -19,20 +19,19 @@
 #include <lib/LogUtils.h>
 DECLARE_LOG_OBJECT()
 
-#include <mutex>
+#include <boost/thread.hpp>
+#include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
-
+#include <boost/scoped_array.hpp>
+#include <boost/make_shared.hpp>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/mean.hpp>
 #include <boost/accumulators/statistics/p_square_quantile.hpp>
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options.hpp>
-#include <thread>
-#include <functional>
 namespace po = boost::program_options;
 
-#include <atomic>
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -40,7 +39,7 @@ namespace po = boost::program_options;
 #include "RateLimiter.h"
 #include <pulsar/MessageBuilder.h>
 #include <pulsar/Authentication.h>
-typedef std::shared_ptr<pulsar::RateLimiter> RateLimiterPtr;
+typedef boost::shared_ptr<pulsar::RateLimiter> RateLimiterPtr;
 
 struct Arguments {
     std::string authParams;
@@ -63,9 +62,6 @@ struct Arguments {
     unsigned int batchingMaxMessages;
     long batchingMaxAllowedSizeInBytes;
     long batchingMaxPublishDelayMs;
-    std::string encKeyName;
-    std::string encKeyValueFile;
-    std::string compression;
 };
 
 namespace pulsar {
@@ -78,50 +74,18 @@ class PulsarFriend {
 };
 }
 
+// Stats
 unsigned long messagesProduced;
 unsigned long bytesProduced;
 using namespace boost::accumulators;
-using namespace pulsar;
 
-class EncKeyReader: public CryptoKeyReader {
-
-  private:
-    std::string pubKeyContents;
-
-    void readFile(std::string fileName, std::string& fileContents) const {
-        std::ifstream ifs(fileName);
-        std::stringstream fileStream;
-        fileStream << ifs.rdbuf();
-        fileContents = fileStream.str();
-    }
-
-  public:
-
-    EncKeyReader(std::string keyFile) {
-        if (keyFile.empty()) {
-            return;
-        }
-        readFile(keyFile, pubKeyContents);
-    }
-
-    Result getPublicKey(const std::string &keyName, std::map<std::string, std::string>& metadata, EncryptionKeyInfo& encKeyInfo) const {
-        encKeyInfo.setKey(pubKeyContents);
-        return ResultOk;
-    }
-
-    Result getPrivateKey(const std::string &keyName, std::map<std::string, std::string>& metadata, EncryptionKeyInfo& encKeyInfo) const {
-        return ResultInvalidConfiguration;
-    }
-};
-
-// Stats
 typedef accumulator_set<uint64_t, stats<tag::mean, tag::p_square_quantile> > LatencyAccumulator;
 LatencyAccumulator e2eLatencyAccumulator(quantile_probability = 0.99);
 std::vector<pulsar::Producer> producerList;
-std::vector<std::thread> threadList;
+std::vector<boost::thread> threadList;
 
-std::mutex mutex;
-typedef std::unique_lock<std::mutex> Lock;
+boost::mutex mutex;
+typedef boost::unique_lock<boost::mutex> Lock;
 
 typedef std::chrono::high_resolution_clock Clock;
 
@@ -137,40 +101,39 @@ void sendCallback(pulsar::Result result, const pulsar::Message& msg, Clock::time
 
 // Start a pulsar producer on a topic and keep producing messages
 void runProducer(const Arguments& args, std::string topicName, int threadIndex,
-                 RateLimiterPtr limiter, pulsar::Producer& producer,
-                 const std::atomic<bool>& exitCondition) {
+                 RateLimiterPtr limiter, pulsar::Producer& producer) {
     LOG_INFO("Producing messages for topic = " << topicName << ", threadIndex = " << threadIndex);
 
-    std::unique_ptr<char[]> payload(new char[args.msgSize]);
+    boost::scoped_array<char> payload(new char[args.msgSize]);
     memset(payload.get(), 0, args.msgSize);
     pulsar::MessageBuilder builder;
+    try {
+        while (true) {
+            if (args.rate != -1) {
+                limiter->aquire();
+            }
+            pulsar::Message msg = builder.create().setAllocatedContent(payload.get(), args.msgSize).build();
 
-    while (true) {
-        if (args.rate != -1) {
-            limiter->acquire();
+            producer.sendAsync(msg, boost::bind(sendCallback, _1, _2, Clock::now()));
+            boost::this_thread::interruption_point();
         }
-        pulsar::Message msg = builder.create().setAllocatedContent(payload.get(), args.msgSize).build();
-
-        producer.sendAsync(msg, std::bind(sendCallback, std::placeholders::_1, std::placeholders::_2, Clock::now()));
-        if (exitCondition) {
-            LOG_INFO("Thread interrupted. Exiting producer thread.");
-            break;
-        }
+    } catch(const boost::thread_interrupted&) {
+        // Thread interruption request received, break the loop
+        LOG_INFO("Thread interrupted. Exiting thread.");
     }
 }
 
-void startPerfProducer(const Arguments& args, pulsar::ProducerConfiguration &producerConf, pulsar::Client &client,
-        const std::atomic<bool>& exitCondition) {
+void startPerfProducer(const Arguments& args, pulsar::ProducerConfiguration &producerConf, pulsar::Client &client) {
     RateLimiterPtr limiter;
     if (args.rate != -1) {
-        limiter = std::make_shared<pulsar::RateLimiter>(args.rate);
+        limiter = boost::make_shared<pulsar::RateLimiter>(args.rate);
     }
 
     producerList.resize(args.numTopics * args.numProducers);
     for (int i = 0; i < args.numTopics; i++) {
         std::string topic =
                 (args.numTopics == 1) ?
-                        args.topic : args.topic + "-" + std::to_string(i);
+                        args.topic : args.topic + "-" + boost::lexical_cast<std::string>(i);
         LOG_INFO("Adding " << args.numProducers << " producers on topic " << topic);
 
         for (int j = 0; j < args.numProducers; j++) {
@@ -183,15 +146,15 @@ void startPerfProducer(const Arguments& args, pulsar::ProducerConfiguration &pro
             }
 
             for (int k = 0; k < args.numOfThreadsPerProducer; k++) {
-                threadList.push_back(std::thread(
-                        std::bind(runProducer, args, topic, k, limiter, producerList[i * args.numProducers + j],
-                                    std::cref(exitCondition))));
+                threadList.push_back(boost::thread(boost::bind(runProducer, args, topic, k, limiter, producerList[i*args.numProducers + j])));
             }
         }
     }
 }
 
 int main(int argc, char** argv) {
+    LogUtils::init("conf/log4cxx.conf");
+
     std::string defaultServiceUrl;
 
     // First try to read default values from config file if present
@@ -263,19 +226,11 @@ int main(int argc, char** argv) {
     ("batch-size", po::value<unsigned int>(&args.batchingMaxMessages)->default_value(1),
             "If batch size == 1 then batching is disabled. Default batch size == 1") //
 
-    ("compression", po::value<std::string>(&args.compression)->default_value(""),
-             "Compression can be either 'zlib' or 'lz4'. Default is no compression") //
-
     ("max-batch-size-in-bytes", po::value<long>(&args.batchingMaxAllowedSizeInBytes)->default_value(128 * 1024),
             "Use only is batch-size > 1, Default is 128 KB") //
 
     ("max-batch-publish-delay-in-ms", po::value<long>(&args.batchingMaxPublishDelayMs)->default_value(3000),
-            "Use only is batch-size > 1, Default is 3 seconds") //
-
-    ("encryption-key-name,k", po::value<std::string>(&args.encKeyName)->default_value(""), "The public key name to encrypt payload") //
-
-    ("encryption-key-value-file,f", po::value<std::string>(&args.encKeyValueFile)->default_value(""),
-            "The file which contains the public key to encrypt payload"); //
+            "Use only is batch-size > 1, Default is 3 seconds");
 
     po::options_description hidden;
     hidden.add_options()("topic", po::value<std::string>(&args.topic), "Topic name");
@@ -311,8 +266,6 @@ int main(int argc, char** argv) {
     for (po::variables_map::iterator it = map.begin(); it != map.end(); ++it) {
         if (it->second.value().type() == typeid(std::string)) {
             LOG_INFO(it->first << ": " << it->second.as<std::string>());
-        } else if (it->second.value().type() == typeid(bool)) {
-            LOG_INFO(it->first << ": " << it->second.as<bool>());
         } else if (it->second.value().type() == typeid(int)) {
             LOG_INFO(it->first << ": " << it->second.as<int>());
         } else if (it->second.value().type() == typeid(double)) {
@@ -336,23 +289,8 @@ int main(int argc, char** argv) {
         producerConf.setBatchingMaxPublishDelayMs(args.batchingMaxPublishDelayMs);
     }
 
-    if (args.compression == "zlib") {
-        producerConf.setCompressionType(CompressionZLib);
-    } else if (args.compression == "lz4") {
-        producerConf.setCompressionType(CompressionLZ4);
-    } else if (!args.compression.empty()) {
-        LOG_WARN("Invalid compression type: " << args.compression);
-        return -1;
-    }
-
     // Block if queue is full else we will start seeing errors in sendAsync
     producerConf.setBlockIfQueueFull(true);
-    std::shared_ptr<EncKeyReader> keyReader = std::make_shared<EncKeyReader>(args.encKeyValueFile);
-    if (!args.encKeyName.empty()) {
-        producerConf.addEncryptionKey(args.encKeyName);
-        producerConf.setCryptoKeyReader(keyReader);
-    }
-
     pulsar::ClientConfiguration conf;
     conf.setUseTls(args.isUseTls);
     conf.setTlsAllowInsecureConnection(args.isTlsAllowInsecureConnection);
@@ -368,14 +306,11 @@ int main(int argc, char** argv) {
     }
 
     pulsar::Client client(pulsar::PulsarFriend::getClient(args.serviceURL, conf, false));
-
-    std::atomic<bool> exitCondition;
-    startPerfProducer(args, producerConf, client, exitCondition);
+    startPerfProducer(args, producerConf, client);
 
     Clock::time_point oldTime = Clock::now();
     unsigned long totalMessagesProduced = 0;
-    long messagesToSend = args.numberOfSamples;
-    while (args.numberOfSamples == 0 || --messagesToSend > 0) {
+    while (args.numberOfSamples--) {
         std::this_thread::sleep_for(std::chrono::seconds(args.samplingPeriod));
 
         Clock::time_point now = Clock::now();
@@ -398,9 +333,9 @@ int main(int argc, char** argv) {
         oldTime = now;
     }
     LOG_INFO("Total messagesProduced = " << totalMessagesProduced + messagesProduced);
-    exitCondition = true;
-    for (auto& thread : threadList) {
-        thread.join();
+    for (int i = 0; i < threadList.size(); i++) {
+        threadList[i].interrupt();
+        threadList[i].join();
     }
     // Waiting for the sendCallbacks To Complete
     usleep(2 * 1000 * 1000);

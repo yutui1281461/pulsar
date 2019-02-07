@@ -6,9 +6,9 @@
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
-#
+# 
 #   http://www.apache.org/licenses/LICENSE-2.0
-#
+# 
 # Unless required by applicable law or agreed to in writing,
 # software distributed under the License is distributed on an
 # "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -17,16 +17,16 @@
 # under the License.
 #
 
-file(GLOB PULSAR_SOURCES *.cc lz4/*.c checksum/*.cc stats/*.cc c/*.cc auth/*.cc auth/athenz/*.cc)
+file(GLOB PULSAR_SOURCES *.cc lz4/*.c checksum/*.cc stats/*.cc)
 
 execute_process(COMMAND cat ../pom.xml COMMAND xmllint --format - COMMAND sed "s/xmlns=\".*\"//g" COMMAND xmllint --stream --pattern /project/version --debug - COMMAND grep -A 2 "matches pattern" COMMAND grep text COMMAND sed "s/.* [0-9] //g" OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE PV)
-set (CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -D_PULSAR_VERSION_=\\\"${PV}\\\"")
+set (CMAKE_CXX_FLAGS " ${CMAKE_CXX_FLAGS} -msse4.2 -mpclmul -D_PULSAR_VERSION_=\\\"${PV}\\\"")
 
 # Protobuf generation is only supported natively starting from CMake 3.8
 # Using custom command for now
 ADD_CUSTOM_COMMAND(
          OUTPUT PulsarApi.pb.h PulsarApi.pb.cc
-         COMMAND protoc -I ../../pulsar-common/src/main/proto ../../pulsar-common/src/main/proto/PulsarApi.proto --cpp_out=${CMAKE_SOURCE_DIR}/lib
+         COMMAND protoc -I ../../pulsar-common/src/main/proto ../../pulsar-common/src/main/proto/PulsarApi.proto --cpp_out=${CMAKE_CURRENT_BINARY_DIR}
          DEPENDS
          ../../pulsar-common/src/main/proto/PulsarApi.proto
          WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
@@ -45,7 +45,4 @@ set_target_properties(pulsarShared PROPERTIES OUTPUT_NAME ${LIB_NAME} VERSION ${
 target_link_libraries(pulsarStatic ${COMMON_LIBS})
 target_link_libraries(pulsarShared ${COMMON_LIBS})
 
-install(TARGETS pulsarStatic DESTINATION lib)
-install(TARGETS pulsarShared DESTINATION lib)
-
-install(DIRECTORY "../include/pulsar" DESTINATION include)
+add_subdirectory(auth)

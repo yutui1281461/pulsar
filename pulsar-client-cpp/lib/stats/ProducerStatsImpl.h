@@ -23,33 +23,30 @@
 #include <pulsar/Message.h>
 #include <map>
 #include <lib/ExecutorService.h>
-
-#if BOOST_VERSION >= 106400
-#include <boost/serialization/array_wrapper.hpp>
-#endif
 #include <boost/accumulators/framework/features.hpp>
 
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics.hpp>
 #include <boost/accumulators/framework/accumulator_set.hpp>
 #include <boost/accumulators/statistics/extended_p_square.hpp>
+#include <boost/array.hpp>
 
 #include <boost/date_time/local_time/local_time.hpp>
-#include <memory>
-#include <mutex>
+#include <boost/array.hpp>
 #include <iostream>
 #include <vector>
 #include <lib/Utils.h>
+#include <boost/bind.hpp>
 #include <lib/stats/ProducerStatsBase.h>
 
 namespace pulsar {
-typedef boost::accumulators::accumulator_set<
-    double,
-    boost::accumulators::stats<boost::accumulators::tag::mean, boost::accumulators::tag::extended_p_square> >
-    LatencyAccumulator;
+typedef boost::accumulators::accumulator_set<double,
+        boost::accumulators::stats<boost::accumulators::tag::mean,
+                boost::accumulators::tag::extended_p_square> > LatencyAccumulator;
 
-class ProducerStatsImpl : public std::enable_shared_from_this<ProducerStatsImpl>, public ProducerStatsBase {
-   private:
+class ProducerStatsImpl : public boost::enable_shared_from_this<ProducerStatsImpl>,
+        public ProducerStatsBase {
+ private:
     unsigned long numMsgsSent_;
     unsigned long numBytesSent_;
     std::map<Result, unsigned long> sendMap_;
@@ -62,7 +59,7 @@ class ProducerStatsImpl : public std::enable_shared_from_this<ProducerStatsImpl>
 
     std::string producerStr_;
     DeadlineTimerPtr timer_;
-    std::mutex mutex_;
+    boost::mutex mutex_;
     unsigned int statsIntervalInSeconds_;
 
     friend std::ostream& operator<<(std::ostream&, const ProducerStatsImpl&);
@@ -70,8 +67,7 @@ class ProducerStatsImpl : public std::enable_shared_from_this<ProducerStatsImpl>
     friend class PulsarFriend;
 
     static std::string latencyToString(const LatencyAccumulator&);
-
-   public:
+ public:
     ProducerStatsImpl(std::string, DeadlineTimerPtr, unsigned int);
 
     ProducerStatsImpl(const ProducerStatsImpl& stats);
@@ -84,23 +80,39 @@ class ProducerStatsImpl : public std::enable_shared_from_this<ProducerStatsImpl>
 
     ~ProducerStatsImpl();
 
-    inline unsigned long getNumMsgsSent() { return numMsgsSent_; }
+    inline unsigned long getNumMsgsSent() {
+        return numMsgsSent_;
+    }
 
-    inline unsigned long getNumBytesSent() { return numBytesSent_; }
+    inline unsigned long getNumBytesSent() {
+        return numBytesSent_;
+    }
 
-    inline std::map<Result, unsigned long> getSendMap() { return sendMap_; }
+    inline std::map<Result, unsigned long> getSendMap() {
+        return sendMap_;
+    }
 
-    inline unsigned long getTotalMsgsSent() { return totalMsgsSent_; }
+    inline unsigned long getTotalMsgsSent() {
+        return totalMsgsSent_;
+    }
 
-    inline unsigned long getTotalBytesSent() { return totalBytesSent_; }
+    inline unsigned long getTotalBytesSent() {
+        return totalBytesSent_;
+    }
 
-    inline std::map<Result, unsigned long> getTotalSendMap() { return totalSendMap_; }
+    inline std::map<Result, unsigned long> getTotalSendMap() {
+        return totalSendMap_;
+    }
 
-    inline LatencyAccumulator getLatencyAccumulator() { return latencyAccumulator_; }
+    inline LatencyAccumulator getLatencyAccumulator() {
+        return latencyAccumulator_;
+    }
 
-    inline LatencyAccumulator getTotalLatencyAccumulator() { return totalLatencyAccumulator_; }
+    inline LatencyAccumulator getTotalLatencyAccumulator() {
+        return totalLatencyAccumulator_;
+    }
 };
-typedef std::shared_ptr<ProducerStatsImpl> ProducerStatsImplPtr;
-}  // namespace pulsar
+typedef boost::shared_ptr<ProducerStatsImpl> ProducerStatsImplPtr;
+}
 
-#endif  // PULSAR_PRODUCER_STATS_IMPL_HEADER
+#endif // PULSAR_PRODUCER_STATS_IMPL_HEADER

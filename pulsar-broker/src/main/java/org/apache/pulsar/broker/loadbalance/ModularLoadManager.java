@@ -18,13 +18,9 @@
  */
 package org.apache.pulsar.broker.loadbalance;
 
-import java.util.Optional;
-import java.util.Set;
-
 import org.apache.pulsar.broker.PulsarServerException;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.common.naming.ServiceUnitId;
-import org.apache.pulsar.policies.data.loadbalancer.LocalBrokerData;
 import org.apache.pulsar.policies.data.loadbalancer.ServiceLookupData;
 import org.apache.pulsar.zookeeper.ZooKeeperCache.Deserializer;
 
@@ -36,7 +32,7 @@ public interface ModularLoadManager {
 
     /**
      * As any broker, disable the broker this manager is running on.
-     *
+     * 
      * @throws PulsarServerException
      *             If ZooKeeper failed to disable the broker.
      */
@@ -51,7 +47,7 @@ public interface ModularLoadManager {
     /**
      * As the leader broker, attempt to automatically detect and split hot namespace bundles.
      */
-    void checkNamespaceBundleSplit();
+    void doNamespaceBundleSplit();
 
     /**
      * Initialize this load manager using the given pulsar service.
@@ -60,16 +56,16 @@ public interface ModularLoadManager {
 
     /**
      * As the leader broker, find a suitable broker for the assignment of the given bundle.
-     *
+     * 
      * @param serviceUnit
      *            ServiceUnitId for the bundle.
      * @return The name of the selected broker, as it appears on ZooKeeper.
      */
-    Optional<String> selectBrokerForAssignment(ServiceUnitId serviceUnit);
+    String selectBrokerForAssignment(ServiceUnitId serviceUnit);
 
     /**
      * As any broker, start the load manager.
-     *
+     * 
      * @throws PulsarServerException
      *             If an unexpected error prevented the load manager from being started.
      */
@@ -77,7 +73,7 @@ public interface ModularLoadManager {
 
     /**
      * As any broker, stop the load manager.
-     *
+     * 
      * @throws PulsarServerException
      *             If an unexpected error occurred when attempting to stop the load manager.
      */
@@ -86,7 +82,7 @@ public interface ModularLoadManager {
     /**
      * As any broker, retrieve the namespace bundle stats and system resource usage to update data local to this broker.
      */
-    LocalBrokerData updateLocalBrokerData();
+    void updateLocalBrokerData();
 
     /**
      * As any broker, write the local broker data to ZooKeeper.
@@ -100,15 +96,8 @@ public interface ModularLoadManager {
 
     /**
      * Return :{@link Deserializer} to deserialize load-manager load report
-     *
-     * @return
-     */
-    Deserializer<? extends ServiceLookupData> getLoadReportDeserializer();
-
-    /**
-     * Get available broker list in cluster
      * 
      * @return
      */
-    Set<String> getAvailableBrokers();
+    Deserializer<? extends ServiceLookupData> getLoadReportDeserializer();
 }

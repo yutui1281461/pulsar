@@ -18,25 +18,25 @@
  */
 package org.apache.pulsar.admin.cli;
 
-import com.beust.jcommander.JCommander;
-import com.beust.jcommander.Parameter;
-
 import java.io.FileInputStream;
-import java.lang.reflect.InvocationTargetException;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.function.Function;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.client.admin.PulsarAdmin;
-import org.apache.pulsar.client.admin.PulsarAdminBuilder;
+import org.apache.pulsar.client.api.ClientConfiguration;
+
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
 
 public class PulsarAdminTool {
-    protected final Map<String, Class<?>> commandMap;
+    private final Map<String, Class> commandMap;
     private final JCommander jcommander;
-    protected final PulsarAdminBuilder adminBuilder;
+    private final ClientConfiguration config;
 
     @Parameter(names = { "--admin-url" }, description = "Admin Service URL to which to connect.")
     String serviceUrl = null;
@@ -47,34 +47,23 @@ public class PulsarAdminTool {
     @Parameter(names = { "--auth-params" }, description = "Authentication parameters, e.g., \"key1:val1,key2:val2\".")
     String authParams = null;
 
-    @Parameter(names = { "--tls-allow-insecure" }, description = "Allow TLS insecure connection")
-    Boolean tlsAllowInsecureConnection;
-
-
-    @Parameter(names = { "--tls-enable-hostname-verification" }, description = "Enable TLS common name verification")
-    Boolean tlsEnableHostnameVerification;
-
     @Parameter(names = { "-h", "--help", }, help = true, description = "Show this help.")
     boolean help;
 
     PulsarAdminTool(Properties properties) throws Exception {
         // fallback to previous-version serviceUrl property to maintain backward-compatibility
         serviceUrl = StringUtils.isNotBlank(properties.getProperty("webServiceUrl"))
-                ? properties.getProperty("webServiceUrl")
-                : properties.getProperty("serviceUrl");
+                ? properties.getProperty("webServiceUrl") : properties.getProperty("serviceUrl");
         authPluginClassName = properties.getProperty("authPlugin");
         authParams = properties.getProperty("authParams");
-        boolean tlsAllowInsecureConnection = this.tlsAllowInsecureConnection != null ? this.tlsAllowInsecureConnection
-                : Boolean.parseBoolean(properties.getProperty("tlsAllowInsecureConnection", "false"));
-
-        boolean tlsEnableHostnameVerification = this.tlsEnableHostnameVerification != null
-                ? this.tlsEnableHostnameVerification
-                : Boolean.parseBoolean(properties.getProperty("tlsEnableHostnameVerification", "false"));
+        boolean useTls = Boolean.parseBoolean(properties.getProperty("useTls"));
+        boolean tlsAllowInsecureConnection = Boolean.parseBoolean(properties.getProperty("tlsAllowInsecureConnection"));
         String tlsTrustCertsFilePath = properties.getProperty("tlsTrustCertsFilePath");
 
-        adminBuilder = PulsarAdmin.builder().allowTlsInsecureConnection(tlsAllowInsecureConnection)
-                .enableTlsHostnameVerification(tlsEnableHostnameVerification)
-                .tlsTrustCertsFilePath(tlsTrustCertsFilePath);
+        config = new ClientConfiguration();
+        config.setUseTls(useTls);
+        config.setTlsAllowInsecureConnection(tlsAllowInsecureConnection);
+        config.setTlsTrustCertsFilePath(tlsTrustCertsFilePath);
 
         jcommander = new JCommander();
         jcommander.setProgramName("pulsar-admin");
@@ -85,73 +74,39 @@ public class PulsarAdminTool {
         commandMap.put("ns-isolation-policy", CmdNamespaceIsolationPolicy.class);
         commandMap.put("brokers", CmdBrokers.class);
         commandMap.put("broker-stats", CmdBrokerStats.class);
-        commandMap.put("tenants", CmdTenants.class);
-        commandMap.put("properties", CmdTenants.CmdProperties.class); // deprecated, doesn't show in usage()
+        commandMap.put("properties", CmdProperties.class);
         commandMap.put("namespaces", CmdNamespaces.class);
-        commandMap.put("topics", CmdTopics.class);
-        commandMap.put("schemas", CmdSchemas.class);
-        commandMap.put("bookies", CmdBookies.class);
-
-        // Hidden deprecated "persistent" and "non-persistent" subcommands
         commandMap.put("persistent", CmdPersistentTopics.class);
-        commandMap.put("non-persistent", CmdNonPersistentTopics.class);
-
-
         commandMap.put("resource-quotas", CmdResourceQuotas.class);
-        commandMap.put("functions", CmdFunctions.class);
-        commandMap.put("functions-worker", CmdFunctionWorker.class);
-        commandMap.put("source", CmdSources.class);
-        commandMap.put("sink", CmdSinks.class);
     }
 
-    private void setupCommands(Function<PulsarAdminBuilder, ? extends PulsarAdmin> adminFactory) {
+    private void setupCommands() {
         try {
-            adminBuilder.serviceHttpUrl(serviceUrl);
-            adminBuilder.authentication(authPluginClassName, authParams);
-            PulsarAdmin admin = adminFactory.apply(adminBuilder);
-            for (Map.Entry<String, Class<?>> c : commandMap.entrySet()) {
-                if (admin != null) {
-                    // Other mode, all components are initialized.
-                    jcommander.addCommand(c.getKey(), c.getValue().getConstructor(PulsarAdmin.class).newInstance(admin));
-                } else if (c.getKey().equals("functions") || c.getKey().equals("source") || c.getKey().equals("sink")) {
-                    // In mode localrun, only some components are initialized, such as source, sink and functions
-                    jcommander.addCommand(c.getKey(), c.getValue().getConstructor(PulsarAdmin.class).newInstance(admin));
-                }
+            URL url = new URL(serviceUrl);
+            config.setAuthentication(authPluginClassName, authParams);
+            PulsarAdmin admin = new PulsarAdmin(url, config);
+            for (Map.Entry<String, Class> c : commandMap.entrySet()) {
+                jcommander.addCommand(c.getKey(), c.getValue().getConstructor(PulsarAdmin.class).newInstance(admin));
             }
+        } catch (MalformedURLException e) {
+            System.err.println("Invalid serviceUrl: '" + serviceUrl + "'");
+            System.exit(1);
         } catch (Exception e) {
-            Throwable cause;
-            if (e instanceof InvocationTargetException && null != e.getCause()) {
-                cause = e.getCause();
-            } else {
-                cause = e;
-            }
-            System.err.println(cause.getClass() + ": " + cause.getMessage());
+            System.err.println(e.getClass() + ": " + e.getMessage());
             System.exit(1);
         }
     }
 
     boolean run(String[] args) {
-        return run(args, adminBuilder -> {
-            try {
-                return adminBuilder.build();
-            } catch (Exception ex) {
-                System.err.println(ex.getClass() + ": " + ex.getMessage());
-                System.exit(1);
-                return null;
-            }
-        });
-    }
-
-    boolean run(String[] args, Function<PulsarAdminBuilder, ? extends PulsarAdmin> adminFactory) {
         if (args.length == 0) {
-            setupCommands(adminFactory);
+            setupCommands();
             jcommander.usage();
             return false;
         }
 
         int cmdPos;
-        for (cmdPos = 0; cmdPos < args.length; cmdPos++) {
-            if (commandMap.containsKey(args[cmdPos])) {
+        for (cmdPos=0; cmdPos < args.length; cmdPos++) {
+            if (commandMap.containsKey(args[cmdPos])){
                 break;
             }
         }
@@ -161,28 +116,28 @@ public class PulsarAdminTool {
         } catch (Exception e) {
             System.err.println(e.getMessage());
             System.err.println();
-            setupCommands(adminFactory);
+            setupCommands();
             jcommander.usage();
             return false;
         }
 
         if (help) {
-            setupCommands(adminFactory);
+            setupCommands();
             jcommander.usage();
-            return true;
+            return false;
         }
 
         if (cmdPos == args.length) {
-            setupCommands(adminFactory);
+            setupCommands();
             jcommander.usage();
             return false;
         } else {
-            setupCommands(adminFactory);
+            setupCommands();
             String cmd = args[cmdPos];
             JCommander obj = jcommander.getCommands().get(cmd);
             CmdBase cmdObj = (CmdBase) obj.getObjects().get(0);
 
-            return cmdObj.run(Arrays.copyOfRange(args, cmdPos + 1, args.length));
+            return cmdObj.run(Arrays.copyOfRange(args, cmdPos+1, args.length));
         }
     }
 
@@ -191,40 +146,19 @@ public class PulsarAdminTool {
         Properties properties = new Properties();
 
         if (configFile != null) {
-            try (FileInputStream fis = new FileInputStream(configFile)) {
+            FileInputStream fis = null;
+            try {
+                fis = new FileInputStream(configFile);
                 properties.load(fis);
+            } finally {
+                if (fis != null)
+                    fis.close();
             }
         }
 
         PulsarAdminTool tool = new PulsarAdminTool(properties);
 
-        int cmdPos;
-        for (cmdPos = 1; cmdPos < args.length; cmdPos++) {
-            if (tool.commandMap.containsKey(args[cmdPos])) {
-                break;
-            }
-        }
-
-        ++cmdPos;
-        boolean isLocalRun = cmdPos < args.length && "localrun".equals(args[cmdPos].toLowerCase());
-
-        Function<PulsarAdminBuilder, ? extends PulsarAdmin> adminFactory;
-        if (isLocalRun) {
-            // bypass constructing admin client
-            adminFactory = (adminBuilder) -> null;
-        } else {
-            adminFactory = (adminBuilder) -> {
-                try {
-                    return adminBuilder.build();
-                } catch (Exception ex) {
-                    System.err.println(ex.getClass() + ": " + ex.getMessage());
-                    System.exit(1);
-                    return null;
-                }
-            };
-        }
-
-        if (tool.run(Arrays.copyOfRange(args, 1, args.length), adminFactory)) {
+        if (tool.run(Arrays.copyOfRange(args, 1, args.length))) {
             System.exit(0);
         } else {
             System.exit(1);

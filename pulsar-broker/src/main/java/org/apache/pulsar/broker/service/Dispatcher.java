@@ -19,13 +19,10 @@
 package org.apache.pulsar.broker.service;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.bookkeeper.mledger.impl.PositionImpl;
-import org.apache.pulsar.broker.service.persistent.DispatchRateLimiter;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandSubscribe.SubType;
-import org.apache.pulsar.common.policies.data.Policies;
 import org.apache.pulsar.utils.CopyOnWriteArrayList;
 
 public interface Dispatcher {
@@ -48,14 +45,14 @@ public interface Dispatcher {
 
     /**
      * mark dispatcher closed to stop new incoming requests and disconnect all consumers
-     *
+     * 
      * @return
      */
     CompletableFuture<Void> close();
-
+    
     /**
      * disconnect all consumers
-     *
+     * 
      * @return
      */
     CompletableFuture<Void> disconnectAllConsumers();
@@ -73,13 +70,4 @@ public interface Dispatcher {
 
     void addUnAckedMessages(int unAckMessages);
 
-    RedeliveryTracker getRedeliveryTracker();
-
-    default Optional<DispatchRateLimiter> getRateLimiter() {
-        return Optional.empty();
-    }
-
-    default void initializeDispatchRateLimiterIfNeeded(Optional<Policies> policies) {
-        //No-op
-    }
 }

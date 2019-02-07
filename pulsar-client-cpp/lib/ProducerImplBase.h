@@ -24,26 +24,21 @@
 namespace pulsar {
 class ProducerImplBase;
 
-typedef std::weak_ptr<ProducerImplBase> ProducerImplBaseWeakPtr;
+typedef boost::weak_ptr<ProducerImplBase> ProducerImplBaseWeakPtr;
+typedef boost::shared_ptr<ProducerImplBase> ProducerImplBasePtr;
 
 class ProducerImplBase {
-   public:
-    virtual ~ProducerImplBase() {}
+public:
+  virtual ~ProducerImplBase(){
+  }
 
-    virtual const std::string& getProducerName() const = 0;
-
-    virtual int64_t getLastSequenceId() const = 0;
-    virtual const std::string& getSchemaVersion() const = 0;
-
-    virtual void sendAsync(const Message& msg, SendCallback callback) = 0;
-    virtual void closeAsync(CloseCallback callback) = 0;
-    virtual void start() = 0;
-    virtual void shutdown() = 0;
-    virtual bool isClosed() = 0;
-    virtual const std::string& getTopic() const = 0;
-    virtual Future<Result, ProducerImplBaseWeakPtr> getProducerCreatedFuture() = 0;
-    virtual void triggerFlush() = 0;
-    virtual void flushAsync(FlushCallback callback) = 0;
+  virtual void sendAsync(const Message& msg, SendCallback callback) = 0;
+  virtual void closeAsync(CloseCallback callback) = 0;
+  virtual void start() = 0;
+  virtual void shutdown() = 0;
+  virtual bool isClosed() = 0;
+  virtual const std::string& getTopic() const = 0;
+  virtual Future<Result, ProducerImplBaseWeakPtr> getProducerCreatedFuture() = 0;
 };
-}  // namespace pulsar
-#endif  // PULSAR_PRODUCER_IMPL_BASE_HEADER
+}
+#endif //PULSAR_PRODUCER_IMPL_BASE_HEADER

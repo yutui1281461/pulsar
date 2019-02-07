@@ -17,9 +17,10 @@
  * under the License.
  */
 #include <LogUtils.h>
-#include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 int main(int argc, char **argv) {
-    ::testing::InitGoogleMock(&argc, argv);
+    LogUtils::init("log4cxx.conf");
+    ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

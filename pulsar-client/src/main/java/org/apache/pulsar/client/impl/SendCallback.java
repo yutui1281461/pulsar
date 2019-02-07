@@ -37,24 +37,16 @@ public interface SendCallback {
     /**
      * used to specify a callback to be invoked on completion of a send operation for individual messages sent in a
      * batch. Callbacks for messages in a batch get chained
-     *
-     * @param msg message sent
-     * @param scb callback associated with the message
+     * 
+     * @param scb
      */
-    void addCallback(MessageImpl<?> msg, SendCallback scb);
+    void addCallback(SendCallback scb);
 
     /**
      *
      * @return next callback in chain
      */
     SendCallback getNextSendCallback();
-
-    /**
-     * Return next message in chain
-     *
-     * @return next message in chain
-     */
-    MessageImpl<?> getNextMessage();
 
     /**
      *

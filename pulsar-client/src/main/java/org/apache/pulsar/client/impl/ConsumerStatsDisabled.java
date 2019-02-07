@@ -18,110 +18,29 @@
  */
 package org.apache.pulsar.client.impl;
 
-import java.util.Optional;
-
-import org.apache.pulsar.client.api.ConsumerStats;
 import org.apache.pulsar.client.api.Message;
 
-import io.netty.util.Timeout;
-
-public class ConsumerStatsDisabled implements ConsumerStatsRecorder {
+public class ConsumerStatsDisabled extends ConsumerStats {
     private static final long serialVersionUID = 1L;
 
-    static final ConsumerStatsRecorder INSTANCE = new ConsumerStatsDisabled();
-
     @Override
-    public void updateNumMsgsReceived(Message<?> message) {
+    void updateNumMsgsReceived(Message message) {
         // Do nothing
     }
 
     @Override
-    public void incrementNumReceiveFailed() {
+    void incrementNumReceiveFailed() {
         // Do nothing
     }
 
     @Override
-    public void incrementNumAcksSent(long numAcks) {
+    void incrementNumAcksSent(long numAcks) {
         // Do nothing
     }
 
     @Override
-    public void incrementNumAcksFailed() {
+    void incrementNumAcksFailed() {
         // Do nothing
     }
 
-    @Override
-    public long getNumMsgsReceived() {
-        return 0;
-    }
-
-    @Override
-    public long getNumBytesReceived() {
-        return 0;
-    }
-
-    @Override
-    public long getNumAcksSent() {
-        return 0;
-    }
-
-    @Override
-    public long getNumAcksFailed() {
-        return 0;
-    }
-
-    @Override
-    public long getNumReceiveFailed() {
-        return 0;
-    }
-
-    @Override
-    public long getTotalMsgsReceived() {
-        return 0;
-    }
-
-    @Override
-    public long getTotalBytesReceived() {
-        return 0;
-    }
-
-    @Override
-    public long getTotalReceivedFailed() {
-        return 0;
-    }
-
-    @Override
-    public long getTotalAcksSent() {
-        return 0;
-    }
-
-    @Override
-    public long getTotalAcksFailed() {
-        return 0;
-    }
-
-    @Override
-    public double getRateMsgsReceived() {
-        return 0;
-    }
-
-    @Override
-    public double getRateBytesReceived() {
-        return 0;
-    }
-
-    @Override
-    public Optional<Timeout> getStatTimeout() {
-        return Optional.empty();
-    }
-
-    @Override
-    public void reset() {
-        // do nothing
-    }
-
-    @Override
-    public void updateCumulativeStats(ConsumerStats stats) {
-        // do nothing
-    }
 }

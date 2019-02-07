@@ -21,7 +21,7 @@
 #include "Backoff.h"
 #include "ClientImpl.h"
 #include "ClientConnection.h"
-#include <memory>
+#include <boost/make_shared.hpp>
 #include <boost/asio.hpp>
 #include <string>
 #include <boost/date_time/local_time/local_time.hpp>
@@ -36,12 +36,13 @@ ptime now();
 int64_t currentTimeMillis();
 
 class HandlerBase;
-typedef std::weak_ptr<HandlerBase> HandlerBaseWeakPtr;
-typedef std::shared_ptr<HandlerBase> HandlerBasePtr;
+typedef boost::weak_ptr<HandlerBase> HandlerBaseWeakPtr;
+typedef boost::shared_ptr<HandlerBase> HandlerBasePtr;
 
 class HandlerBase {
-   public:
-    HandlerBase(const ClientImplPtr&, const std::string&, const Backoff&);
+
+ public:
+    HandlerBase(const ClientImplPtr& client, const std::string& topic);
 
     virtual ~HandlerBase();
 
@@ -51,9 +52,11 @@ class HandlerBase {
      * get method for derived class to access weak ptr to connection so that they
      * have to check if they can get a shared_ptr out of it or not
      */
-    ClientConnectionWeakPtr getCnx() { return connection_; }
+    ClientConnectionWeakPtr getCnx() {
+        return connection_;
+    }
 
-   protected:
+ protected:
     /*
      * tries reconnection and sets connection_ to valid object
      */
@@ -80,25 +83,25 @@ class HandlerBase {
 
     virtual const std::string& getName() const = 0;
 
-   private:
-    static void handleNewConnection(Result result, ClientConnectionWeakPtr connection, HandlerBaseWeakPtr wp);
-    static void handleDisconnection(Result result, ClientConnectionWeakPtr connection, HandlerBaseWeakPtr wp);
+ private:
+    static void handleNewConnection(Result result, ClientConnectionWeakPtr connection,
+                                    HandlerBaseWeakPtr wp);
+    static void handleDisconnection(Result result, ClientConnectionWeakPtr connection,
+                                    HandlerBaseWeakPtr wp);
 
     static void handleTimeout(const boost::system::error_code& ec, HandlerBasePtr handler);
 
-   protected:
+ protected:
     ClientImplWeakPtr client_;
     const std::string topic_;
     ClientConnectionWeakPtr connection_;
-    std::mutex mutex_;
-    std::mutex pendingReceiveMutex_;
+    boost::mutex mutex_;
     ptime creationTimestamp_;
 
     const TimeDuration operationTimeut_;
-    typedef std::unique_lock<std::mutex> Lock;
+    typedef boost::unique_lock<boost::mutex> Lock;
 
-    enum State
-    {
+    enum State {
         Pending,
         Ready,
         Closing,
@@ -109,10 +112,9 @@ class HandlerBase {
     State state_;
     Backoff backoff_;
 
-   private:
+ private:
     DeadlineTimerPtr timer_;
     friend class ClientConnection;
-    friend class PulsarFriend;
 };
-}  // namespace pulsar
+}
 #endif  //_PULSAR_HANDLER_BASE_HEADER_

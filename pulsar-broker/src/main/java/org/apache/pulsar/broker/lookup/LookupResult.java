@@ -18,6 +18,10 @@
  */
 package org.apache.pulsar.broker.lookup;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
+import java.net.URI;
+
 import org.apache.pulsar.broker.namespace.NamespaceEphemeralData;
 import org.apache.pulsar.common.lookup.data.LookupData;
 
@@ -43,7 +47,7 @@ public class LookupResult {
     }
 
     public LookupResult(String httpUrl, String httpUrlTls, String brokerServiceUrl, String brokerServiceUrlTls) {
-        this.type = Type.RedirectUrl; // type = redirect => as current broker is
+        this.type = Type.RedirectUrl; // type = reidrect => as current broker is
                                       // not owner and prepares LookupResult
                                       // with other broker's urls
         this.lookupData = new LookupData(brokerServiceUrl, brokerServiceUrlTls, httpUrl, httpUrlTls);
@@ -65,5 +69,5 @@ public class LookupResult {
     public String toString() {
 		return "LookupResult [type=" + type + ", lookupData=" + lookupData + "]";
     }
-
+    
 }

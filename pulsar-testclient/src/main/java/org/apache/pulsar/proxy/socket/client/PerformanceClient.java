@@ -39,7 +39,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.client.api.Authentication;
 import org.apache.pulsar.client.api.AuthenticationDataProvider;
 import org.apache.pulsar.client.api.AuthenticationFactory;
-import org.apache.pulsar.testclient.utils.PaddingDecimalFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -74,8 +73,8 @@ public class PerformanceClient {
         @Parameter(names = { "-u", "--proxy-url" }, description = "Pulsar Proxy URL, e.g., \"ws://localhost:8080/\"", required = true)
         public String proxyURL;
 
-        @Parameter(description = "/persistent/my-property/my-ns/my-topic", required = true)
-        public List<String> topics;
+        @Parameter(description = "/persistent/my-property/cluster1/my-ns/my-topic", required = true)
+        public List<String> destinations;
 
         @Parameter(names = { "-r", "--rate" }, description = "Publish rate msg/s across topics")
         public int msgRate = 100;
@@ -123,7 +122,7 @@ public class PerformanceClient {
             System.exit(-1);
         }
 
-        if (arguments.topics.size() != 1) {
+        if (arguments.destinations.size() != 1) {
             System.err.println("Only one topic name is allowed");
             jc.usage();
             System.exit(-1);
@@ -160,10 +159,10 @@ public class PerformanceClient {
     }
 
     public void runPerformanceTest(long messages, long limit, int numOfTopic, int sizeOfMessage, String baseUrl,
-            String topicName, String authPluginClassName, String authParams) throws InterruptedException, FileNotFoundException {
+            String destination, String authPluginClassName, String authParams) throws InterruptedException, FileNotFoundException {
         ExecutorService executor = Executors.newCachedThreadPool(new DefaultThreadFactory("pulsar-perf-producer-exec"));
         HashMap<String, Tuple> producersMap = new HashMap<>();
-        String produceBaseEndPoint = baseUrl + "ws/producer" + topicName;
+        String produceBaseEndPoint = baseUrl + "ws/producer" + destination;
         for (int i = 0; i < numOfTopic; i++) {
             String topic = numOfTopic > 1 ? produceBaseEndPoint + String.valueOf(i) : produceBaseEndPoint;
             URI produceUri = URI.create(topic);
@@ -294,7 +293,7 @@ public class PerformanceClient {
         PerformanceClient test = new PerformanceClient();
         Arguments arguments = test.loadArguments(args);
         test.runPerformanceTest(arguments.numMessages, arguments.msgRate, arguments.numTopics, arguments.msgSize,
-                arguments.proxyURL, arguments.topics.get(0), arguments.authPluginClassName, arguments.authParams);
+                arguments.proxyURL, arguments.destinations.get(0), arguments.authPluginClassName, arguments.authParams);
     }
 
     private class Tuple {

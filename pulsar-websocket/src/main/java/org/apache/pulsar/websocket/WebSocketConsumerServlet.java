@@ -25,7 +25,6 @@ public class WebSocketConsumerServlet extends WebSocketServlet {
     private static final long serialVersionUID = 1L;
 
     public static final String SERVLET_PATH = "/ws/consumer";
-    public static final String SERVLET_PATH_V2 = "/ws/v2/consumer";
 
     WebSocketService service;
 
@@ -37,10 +36,7 @@ public class WebSocketConsumerServlet extends WebSocketServlet {
     @Override
     public void configure(WebSocketServletFactory factory) {
         factory.getPolicy().setMaxTextMessageSize(WebSocketService.MaxTextFrameSize);
-        if (service.getConfig().getWebSocketSessionIdleTimeoutMillis() > 0) {
-            factory.getPolicy().setIdleTimeout(service.getConfig().getWebSocketSessionIdleTimeoutMillis());
-        }
-        factory.setCreator(
-                (request, response) -> new ConsumerHandler(service, request.getHttpServletRequest(), response));
+
+        factory.setCreator((request, response) -> new ConsumerHandler(service, request.getHttpServletRequest()));
     }
 }

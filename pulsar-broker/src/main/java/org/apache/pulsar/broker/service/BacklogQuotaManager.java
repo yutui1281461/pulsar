@@ -19,6 +19,7 @@
 package org.apache.pulsar.broker.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 import org.apache.bookkeeper.mledger.ManagedCursor;
@@ -27,20 +28,18 @@ import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.admin.AdminResource;
 import org.apache.pulsar.broker.service.persistent.PersistentTopic;
-import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.client.util.FutureUtil;
+import org.apache.pulsar.common.naming.DestinationName;
 import org.apache.pulsar.common.policies.data.BacklogQuota;
 import org.apache.pulsar.common.policies.data.Policies;
 import org.apache.pulsar.common.policies.data.BacklogQuota.BacklogQuotaType;
 import org.apache.pulsar.common.policies.data.BacklogQuota.RetentionPolicy;
-import org.apache.pulsar.common.util.FutureUtil;
 import org.apache.pulsar.common.util.collections.ConcurrentOpenHashSet;
 import org.apache.pulsar.zookeeper.ZooKeeperDataCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
-
-import static org.apache.pulsar.broker.cache.ConfigurationCacheService.POLICIES;
 
 public class BacklogQuotaManager {
     private static final Logger log = LoggerFactory.getLogger(BacklogQuotaManager.class);
@@ -50,7 +49,7 @@ public class BacklogQuotaManager {
     public BacklogQuotaManager(PulsarService pulsar) {
         this.defaultQuota = new BacklogQuota(
                 pulsar.getConfiguration().getBacklogQuotaDefaultLimitGB() * 1024 * 1024 * 1024,
-                pulsar.getConfiguration().getBacklogQuotaDefaultRetentionPolicy());
+                RetentionPolicy.producer_request_hold);
         this.zkCache = pulsar.getConfigurationCache().policiesCache();
     }
 
@@ -60,9 +59,13 @@ public class BacklogQuotaManager {
 
     public BacklogQuota getBacklogQuota(String namespace, String policyPath) {
         try {
-            return zkCache.get(policyPath)
-                    .map(p -> p.backlog_quota_map.getOrDefault(BacklogQuotaType.destination_storage, defaultQuota))
-                    .orElse(defaultQuota);
+            Optional<Policies> policies = zkCache.get(policyPath);
+
+            if (!policies.isPresent()) {
+                return this.defaultQuota;
+            }
+
+            return policies.get().backlog_quota_map.getOrDefault(BacklogQuotaType.destination_storage, defaultQuota);
         } catch (Exception e) {
             log.error(String.format("Failed to read policies data, will apply the default backlog quota: namespace=%s",
                     namespace), e);
@@ -71,7 +74,7 @@ public class BacklogQuotaManager {
     }
 
     public long getBacklogQuotaLimit(String namespace) {
-        String policyPath = AdminResource.path(POLICIES, namespace);
+        String policyPath = AdminResource.path("policies", namespace);
         return getBacklogQuota(namespace, policyPath).getLimit();
     }
 
@@ -82,9 +85,9 @@ public class BacklogQuotaManager {
      *            Topic on which backlog has been exceeded
      */
     public void handleExceededBacklogQuota(PersistentTopic persistentTopic) {
-        TopicName topicName = TopicName.get(persistentTopic.getName());
-        String namespace = topicName.getNamespace();
-        String policyPath = AdminResource.path(POLICIES, namespace);
+        DestinationName destination = DestinationName.get(persistentTopic.getName());
+        String namespace = destination.getNamespace();
+        String policyPath = AdminResource.path("policies", namespace);
 
         BacklogQuota quota = getBacklogQuota(namespace, policyPath);
         log.info("Backlog quota exceeded for topic [{}]. Applying [{}] policy", persistentTopic.getName(),

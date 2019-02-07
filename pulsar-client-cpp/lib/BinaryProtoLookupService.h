@@ -24,59 +24,51 @@
 #include "ConnectionPool.h"
 #include "Backoff.h"
 #include <lib/LookupService.h>
-#include <mutex>
-
 #pragma GCC visibility push(default)
 
 namespace pulsar {
 class LookupDataResult;
 
 class BinaryProtoLookupService : public LookupService {
-   public:
+ public:
     /*
      * constructor
      */
     BinaryProtoLookupService(ConnectionPool& cnxPool, const std::string& serviceUrl);
 
-    Future<Result, LookupDataResultPtr> lookupAsync(const std::string& topicName);
+    Future<Result, LookupDataResultPtr> lookupAsync(const std::string& destinationName);
 
-    Future<Result, LookupDataResultPtr> getPartitionMetadataAsync(const TopicNamePtr& topicName);
+    Future<Result, LookupDataResultPtr> getPartitionMetadataAsync(const DestinationNamePtr& dn);
 
-    Future<Result, NamespaceTopicsPtr> getTopicsOfNamespaceAsync(const NamespaceNamePtr& nsName);
+ private:
 
-   private:
-    std::mutex mutex_;
+    boost::mutex mutex_;
     uint64_t requestIdGenerator_;
 
     std::string serviceUrl_;
     ConnectionPool& cnxPool_;
 
-    void sendTopicLookupRequest(const std::string& topicName, bool authoritative, Result result,
-                                const ClientConnectionWeakPtr& clientCnx, LookupDataResultPromisePtr promise);
+    void sendTopicLookupRequest(const std::string& destinationName, bool authoritative, Result result,
+                     const ClientConnectionWeakPtr& clientCnx, LookupDataResultPromisePtr promise);
 
-    void handleLookup(const std::string& topicName, Result result, LookupDataResultPtr data,
+    void handleLookup(const std::string& destinationName, Result result, LookupDataResultPtr data,
                       const ClientConnectionWeakPtr& clientCnx, LookupDataResultPromisePtr promise);
 
-    void sendPartitionMetadataLookupRequest(const std::string& topicName, Result result,
-                                            const ClientConnectionWeakPtr& clientCnx,
-                                            LookupDataResultPromisePtr promise);
 
-    void handlePartitionMetadataLookup(const std::string& topicName, Result result, LookupDataResultPtr data,
-                                       const ClientConnectionWeakPtr& clientCnx,
-                                       LookupDataResultPromisePtr promise);
+    void sendPartitionMetadataLookupRequest(const std::string& destinationName, Result result,
+                                   const ClientConnectionWeakPtr& clientCnx,
+                                   LookupDataResultPromisePtr promise);
 
-    void sendGetTopicsOfNamespaceRequest(const std::string& nsName, Result result,
-                                         const ClientConnectionWeakPtr& clientCnx,
-                                         NamespaceTopicsPromisePtr promise);
+    void handlePartitionMetadataLookup(const std::string& destinationName, Result result, LookupDataResultPtr data,
+                          const ClientConnectionWeakPtr& clientCnx, LookupDataResultPromisePtr promise);
 
-    void getTopicsOfNamespaceListener(Result result, NamespaceTopicsPtr topicsPtr,
-                                      NamespaceTopicsPromisePtr promise);
 
     uint64_t newRequestId();
+
 };
-typedef std::shared_ptr<BinaryProtoLookupService> BinaryProtoLookupServicePtr;
-}  // namespace pulsar
+typedef boost::shared_ptr<BinaryProtoLookupService> BinaryProtoLookupServicePtr;
+}
 
 #pragma GCC visibility pop
 
-#endif  //_PULSAR_BINARY_LOOKUP_SERVICE_HEADER_
+#endif //_PULSAR_BINARY_LOOKUP_SERVICE_HEADER_

@@ -25,7 +25,7 @@
   <parent>
     <groupId>org.apache.pulsar</groupId>
     <artifactId>pulsar</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>1.19-incubating-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
@@ -41,13 +41,19 @@
 
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>pulsar-client-original</artifactId>
+      <artifactId>pulsar-common</artifactId>
       <version>${project.version}</version>
     </dependency>
 
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>managed-ledger-original</artifactId>
+      <artifactId>pulsar-client</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>managed-ledger</artifactId>
       <version>${project.parent.version}</version>
       <scope>test</scope>
     </dependency>
@@ -57,12 +63,7 @@
       <artifactId>pulsar-zookeeper-utils</artifactId>
       <version>${project.version}</version>
     </dependency>
-
-    <dependency>
-      <groupId>org.apache.commons</groupId>
-      <artifactId>commons-lang3</artifactId>
-    </dependency>
-
+    
     <dependency>
       <groupId>org.glassfish.jersey.containers</groupId>
       <artifactId>jersey-container-servlet-core</artifactId>
@@ -74,15 +75,20 @@
     </dependency>
 
     <dependency>
+      <groupId>com.beust</groupId>
+      <artifactId>jcommander</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
     </dependency>
-
+    
     <dependency>
       <groupId>io.swagger</groupId>
       <artifactId>swagger-core</artifactId>
     </dependency>
-
+    
     <dependency>
       <groupId>com.fasterxml.jackson.jaxrs</groupId>
       <artifactId>jackson-jaxrs-json-provider</artifactId>
@@ -91,6 +97,12 @@
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
+    </dependency>
+
+    <dependency>
+      <artifactId>log4j</artifactId>
+      <groupId>log4j</groupId>
+      <scope>test</scope>
     </dependency>
 
 		<!-- To write basic websockets against -->
@@ -111,6 +123,21 @@
       <groupId>org.eclipse.jetty.websocket</groupId>
       <artifactId>javax-websocket-client-impl</artifactId>
       <version>${jetty.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.powermock</groupId>
+      <artifactId>powermock-api-mockito</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.powermock</groupId>
+      <artifactId>powermock-module-testng</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.hdrhistogram</groupId>

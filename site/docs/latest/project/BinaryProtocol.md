@@ -6,30 +6,9 @@ tags:
 - binary protocol
 ---
 
-<!--
-
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
-
--->
-
 Pulsar uses a custom binary protocol for communications between {% popover producers %}/{% popover consumers %} and {% popover brokers %}. This protocol is designed to support required features, such as {% popover acknowledgements %} and flow control, while ensuring maximum transport and implementation efficiency.
 
-Clients and brokers exchange *commands* with each other. Commands are formatted as binary [protocol buffer](https://developers.google.com/protocol-buffers/) (aka *protobuf*) messages. The format of protobuf commands is specified in the [`PulsarApi.proto`](https://github.com/apache/incubator-pulsar/blob/master/pulsar-common/src/main/proto/PulsarApi.proto) file and also documented in the [Protobuf interface](#protobuf-interface) section below.
+Clients and brokers exchange *commands* with each other. Commands are formatted as binary [protocol buffer](https://developers.google.com/protocol-buffers/) (aka *protobuf*) messages. The format of protobuf commands is specified in the [`PulsarApi.proto`](https://github.com/yahoo/pulsar/blob/master/pulsar-common/src/main/proto/PulsarApi.proto) file and also documented in the [Protobuf interface](#protobuf-interface) section below.
 
 {% include admonition.html type='success' title='Connection sharing' content="Commands for different producers and consumers can be interleaved and sent through the same connection without restriction." %}
 
@@ -43,7 +22,7 @@ Since protobuf doesn't provide any sort of message frame, all messages in the Pu
 The Pulsar protocol allows for two types of commands:
 
 1. *Simple commands* that do not carry a message payload.
-2. *Payload commands* that bear a payload that is used when publishing or delivering messages. In payload commands, the protobuf command data is followed by protobuf [metadata](#message-metadata) and then the payload, which is passed in raw format outside of protobuf. All sizes are passed as 4-byte unsigned big endian integers.
+2. *Payload commands* that bear a payload that is used when publishing or delivering messages. In payload commands, the protobuf command data is followed by protobuf [metadata](#metadata-messages) and then the payload, which is passed in raw format outside of protobuf. All sizes are passed as 4-byte unsigned big endian integers.
 
 {% include admonition.html type='info' content="Message payloads are passed in raw format rather than protobuf format for efficiency reasons." %}
 
@@ -84,17 +63,17 @@ $$
 
 Message metadata is stored alongside the application-specified payload as a serialized protobuf message. Metadata is created by the {% popover producer %} and passed on unchanged to the {% popover consumer %}.
 
-| Field                                | Description                                                                                                                                                                                                                                               |
-|:-------------------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `producer_name`                      | The name of the {% popover producer %} that published the message                                                                                                                                                                                         |
-| `sequence_id`                        | The sequence ID of the message, assigned by {% popover producer %}                                                                                                                                                                                        |
-| `publish_time`                       | The publish timestamp in Unix time (i.e. as the number of milliseconds since January 1st, 1970 in UTC)                                                                                                                                                    |
-| `properties`                         | A sequence of key/value pairs (using the [`KeyValue`](https://github.com/apache/incubator-pulsar/blob/master/pulsar-common/src/main/proto/PulsarApi.proto#L32) message). These are application-defined keys and values with no special meaning to Pulsar. |
-| `replicated_from` *(optional)*       | Indicates that the message has been replicated and specifies the name of the {% popover cluster %} where the message was originally published                                                                                                             |
-| `partition_key` *(optional)*         | While publishing on a partition topic, if the key is present, the hash of the key is used to determine which partition to choose                                                                                                                          |
-| `compression` *(optional)*           | Signals that payload has been compressed and with which compression library                                                                                                                                                                               |
-| `uncompressed_size` *(optional)*     | If compression is used, the producer must fill the uncompressed size field with the original payload size                                                                                                                                                 |
-| `num_messages_in_batch` *(optional)* | If this message is really a [batch](#batch-messages) of multiple entries, this field must be set to the number of messages in the batch                                                                                                                   |
+| Field                                | Description                                                                                                                                                                                                                                    |
+|:-------------------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `producer_name`                      | The name of the {% popover producer %} that published the message                                                                                                                                                                              |
+| `sequence_id`                        | The sequence ID of the message, assigned by {% popover producer %}                                                                                                                                                                             |
+| `publish_time`                       | The publish timestamp in Unix time (i.e. as the number of milliseconds since January 1st, 1970 in UTC)                                                                                                                                         |
+| `properties`                         | A sequence of key/value pairs (using the [`KeyValue`](https://github.com/yahoo/pulsar/blob/master/pulsar-common/src/main/proto/PulsarApi.proto#L29) message). These are application-defined keys and values with no special meaning to Pulsar. |
+| `replicated_from` *(optional)*       | Indicates that the message has been replicated and specifies the name of the {% popover cluster %} where the message was originally published                                                                                                  |
+| `partition_key` *(optional)*         | While publishing on a partition topic, if the key is present, the hash of the key is used to determine which partition to choose                                                                                                               |
+| `compression` *(optional)*           | Signals that payload has been compressed and with which compression library                                                                                                                                                                    |
+| `uncompressed_size` *(optional)*     | If compression is used, the producer must fill the uncompressed size field with the original payload size                                                                                                                                      |
+| `num_messages_in_batch` *(optional)* | If this message is really a [batch](#batch-messages) of multiple entries, this field must be set to the number of messages in the batch                                                                                                        |
 
 ### Batch messages
 
@@ -132,7 +111,7 @@ When compression is enabled, the whole batch will be compressed at once.
 After opening a TCP connection to a broker, typically on port 6650, the client
 is responsible to initiate the session.
 
-![Connect interaction](/img/Binary%20Protocol%20-%20Connect.png)
+![Connect interaction]({{ site.baseurl }}img/Binary%20Protocol%20-%20Connect.png)
 
 After receiving a `Connected` response from the broker, the client can
 consider the connection ready to use. Alternatively, if the broker doesn't
@@ -185,7 +164,7 @@ used by broker is 60s).
 
 A valid implementation of a Pulsar client is not required to send the `Ping`
 probe, though it is required to promptly reply after receiving one from the
-broker in order to prevent the remote side from forcibly closing the TCP connection.
+broker, in order to prevent the remote side to forcibly close the TCP connection.
 
 
 ### Producer
@@ -197,7 +176,7 @@ authorized to publish on the topic.
 Once the client gets confirmation of the producer creation, it can publish
 messages to the broker, referring to the producer id negotiated before.
 
-![Producer interaction](/img/Binary%20Protocol%20-%20Producer.png)
+![Producer interaction]({{ site.baseurl }}img/Binary%20Protocol%20-%20Producer.png)
 
 ##### Command Producer
 
@@ -302,7 +281,7 @@ by load balancer to be transferred to a different broker).
 
 When receiving the `CloseProducer`, the client is expected to go through the
 service discovery lookup again and recreate the producer again. The TCP
-connection is not affected.
+connection is not being affected.
 
 ### Consumer
 
@@ -310,7 +289,7 @@ A consumer is used to attach to a subscription and consume messages from it.
 After every reconnection, a client needs to subscribe to the topic. If a
 subscription is not already there, a new one will be created.
 
-![Consumer](/img/Binary%20Protocol%20-%20Consumer.png)
+![Consumer]({{ site.baseurl }}img/Binary%20Protocol%20-%20Consumer.png)
 
 #### Flow control
 
@@ -385,7 +364,7 @@ message CommandMessage {
 ```
 
 
-##### Command Ack
+#### Command Ack
 
 An `Ack` is used to signal to the broker that a given message has been
 successfully processed by the application and can be discarded by the broker.
@@ -424,11 +403,10 @@ A consumer can ask the broker to redeliver some or all of the pending messages
 that were pushed to that particular consumer and not yet acknowledged.
 
 The protobuf object accepts a list of message ids that the consumer wants to
-be redelivered. The message ids will be honored by the broker only if the
-subscription type is shared. For other subscription types or if the list
-is empty, the broker will redeliver all the pending messages.
+be redelivered. If the list is empty, the broker will redeliver all the
+pending messages.
 
-On redelivery, messages can be sent to the same consumer or, in the case of a
+On redelivery, messages an be sent to the same consumer or, in the case of a
 shared subscription, spread across all available consumers.
 
 
@@ -441,29 +419,6 @@ acknowledged.
 The client should use this command to notify the application that no more
 messages are coming from the consumer.
 
-##### Command ConsumerStats
-
-This command is sent by the client to retrieve Subscriber and Consumer level
-stats from the broker.
-Parameters:
- * `request_id` → Id of the request, used to correlate the request
- 		  and the response.
- * `consumer_id` → Id of an already established consumer.
-
-##### Command ConsumerStatsResponse
-
-This is the broker's response to ConsumerStats request by the client.
-It contains the Subscriber and Consumer level stats of the `consumer_id` sent in the request.
-If the `error_code` or the `error_message` field is set it indicates that the request has failed.
-
-##### Command Unsubscribe
-
-This command is sent by the client to unsubscribe the `consumer_id` from the associated topic.
-Parameters:
- * `request_id` → Id of the request.
- * `consumer_id` → Id of an already established consumer which needs to unsubscribe.
-
-
 ## Service discovery
 
 ### Topic lookup
@@ -473,7 +428,7 @@ reconnect a producer or a consumer. Lookup is used to discover which particular
 broker is serving the topic we are about to use.
 
 Lookup can be done with a REST call as described in the
-[admin API](../admin-api/persistent-topics/#lookup-of-topic)
+[admin API](https://github.com/apache/incubator-pulsar/blob/master/docs/AdminInterface.md#lookup-of-topic)
 docs.
 
 Since Pulsar-1.16 it is also possible to perform the lookup within the binary
@@ -492,7 +447,7 @@ connect to, or a broker hostname to which retry the lookup.
 The `LookupTopic` command has to be used in a connection that has already
 gone through the `Connect` / `Connected` initial handshake.
 
-![Topic lookup](/img/Binary%20Protocol%20-%20Topic%20lookup.png)
+![Topic lookup]({{ site.baseurl }}img/Binary%20Protocol%20-%20Topic%20lookup.png)
 
 ```protobuf
 message CommandLookupTopic {

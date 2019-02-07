@@ -50,7 +50,7 @@ class ActiveBroker(Model):
     timestamp = BigIntegerField(db_index=True)
 
     def __str__(self):
-        return self.broker.url
+        return self.url
 
 @python_2_unicode_compatible
 class Property(Model):

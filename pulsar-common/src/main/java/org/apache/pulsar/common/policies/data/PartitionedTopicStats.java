@@ -24,11 +24,11 @@ import org.apache.pulsar.common.partition.PartitionedTopicMetadata;
 
 import com.google.common.collect.Maps;
 
-public class PartitionedTopicStats extends TopicStats {
+public class PartitionedTopicStats extends PersistentTopicStats {
 
     public PartitionedTopicMetadata metadata;
 
-    public Map<String, TopicStats> partitions;
+    public Map<String, PersistentTopicStats> partitions;
 
     public PartitionedTopicStats() {
         super();

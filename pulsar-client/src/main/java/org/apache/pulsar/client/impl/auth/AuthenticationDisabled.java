@@ -23,10 +23,9 @@ import java.util.Map;
 
 import org.apache.pulsar.client.api.Authentication;
 import org.apache.pulsar.client.api.AuthenticationDataProvider;
-import org.apache.pulsar.client.api.EncodedAuthenticationParameterSupport;
 import org.apache.pulsar.client.api.PulsarClientException;
 
-public class AuthenticationDisabled implements Authentication, EncodedAuthenticationParameterSupport {
+public class AuthenticationDisabled implements Authentication {
 
     protected final AuthenticationDataProvider nullData = new AuthenticationDataNull();
     /**
@@ -48,11 +47,6 @@ public class AuthenticationDisabled implements Authentication, EncodedAuthentica
     }
 
     @Override
-    public void configure(String encodedAuthParamString) {
-    }
-
-    @Override
-    @Deprecated
     public void configure(Map<String, String> authParams) {
     }
 

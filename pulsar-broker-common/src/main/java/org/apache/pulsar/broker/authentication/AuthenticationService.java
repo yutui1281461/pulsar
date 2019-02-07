@@ -25,7 +25,6 @@ import java.util.Map;
 import javax.naming.AuthenticationException;
 import javax.servlet.http.HttpServletRequest;
 
-import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.broker.PulsarServerException;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.slf4j.Logger;
@@ -39,12 +38,10 @@ import com.google.common.collect.Maps;
  */
 public class AuthenticationService implements Closeable {
     private static final Logger LOG = LoggerFactory.getLogger(AuthenticationService.class);
-    private final String anonymousUserRole;
 
     private final Map<String, AuthenticationProvider> providers = Maps.newHashMap();
 
     public AuthenticationService(ServiceConfiguration conf) throws PulsarServerException {
-        anonymousUserRole = conf.getAnonymousUserRole();
         if (conf.isAuthenticationEnabled()) {
             try {
                 AuthenticationProvider provider;
@@ -74,9 +71,6 @@ public class AuthenticationService implements Closeable {
         if (provider != null) {
             return provider.authenticate(authData);
         } else {
-            if (StringUtils.isNotBlank(anonymousUserRole)) {
-                return anonymousUserRole;
-            }
             throw new AuthenticationException("Unsupported authentication mode: " + authMethodName);
         }
     }
@@ -94,9 +88,6 @@ public class AuthenticationService implements Closeable {
 
         // No authentication provided
         if (!providers.isEmpty()) {
-            if (StringUtils.isNotBlank(anonymousUserRole)) {
-                return anonymousUserRole;
-            }
             // If at least a provider was configured, then the authentication needs to be provider
             throw new AuthenticationException("Authentication required");
         } else {

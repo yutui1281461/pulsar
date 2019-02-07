@@ -24,8 +24,9 @@
 #include "BinaryProtoLookupService.h"
 #include "ConnectionPool.h"
 #include "LookupDataResult.h"
-#include <mutex>
-#include <lib/TopicName.h>
+#include "DestinationName.h"
+#include <boost/shared_ptr.hpp>
+#include <boost/thread/mutex.hpp>
 #include "ProducerImplBase.h"
 #include "ConsumerImplBase.h"
 
@@ -35,17 +36,11 @@ namespace pulsar {
 
 class ClientImpl;
 class PulsarFriend;
-typedef std::shared_ptr<ClientImpl> ClientImplPtr;
-typedef std::weak_ptr<ClientImpl> ClientImplWeakPtr;
+typedef boost::shared_ptr<ClientImpl> ClientImplPtr;
+typedef boost::weak_ptr<ClientImpl> ClientImplWeakPtr;
 
-class ReaderImpl;
-typedef std::shared_ptr<ReaderImpl> ReaderImplPtr;
-typedef std::weak_ptr<ReaderImpl> ReaderImplWeakPtr;
-
-const std::string generateRandomName();
-
-class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
-   public:
+class ClientImpl : public boost::enable_shared_from_this<ClientImpl> {
+ public:
     ClientImpl(const std::string& serviceUrl, const ClientConfiguration& clientConfiguration,
                bool poolConnections);
     ~ClientImpl();
@@ -55,17 +50,6 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
 
     void subscribeAsync(const std::string& topic, const std::string& consumerName,
                         const ConsumerConfiguration& conf, SubscribeCallback callback);
-
-    void subscribeAsync(const std::vector<std::string>& topics, const std::string& consumerName,
-                        const ConsumerConfiguration& conf, SubscribeCallback callback);
-
-    void subscribeWithRegexAsync(const std::string& regexPattern, const std::string& consumerName,
-                                 const ConsumerConfiguration& conf, SubscribeCallback callback);
-
-    void createReaderAsync(const std::string& topic, const MessageId& startMessageId,
-                           const ReaderConfiguration& conf, ReaderCallback callback);
-
-    void getPartitionsForTopicAsync(const std::string& topic, GetPartitionsCallback callback);
 
     Future<Result, ClientConnectionWeakPtr> getConnection(const std::string& topic);
     void handleLookup(Result result, LookupDataResultPtr data,
@@ -86,46 +70,39 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
     ExecutorServiceProviderPtr getIOExecutorProvider();
     ExecutorServiceProviderPtr getListenerExecutorProvider();
     ExecutorServiceProviderPtr getPartitionListenerExecutorProvider();
-    LookupServicePtr getLookup();
     friend class PulsarFriend;
 
-   private:
-    void handleCreateProducer(const Result result, const LookupDataResultPtr partitionMetadata,
-                              TopicNamePtr topicName, ProducerConfiguration conf,
+ private:
+
+    void handleCreateProducer(const Result result,
+                              const LookupDataResultPtr partitionMetadata,
+                              DestinationNamePtr dn,
+                              ProducerConfiguration conf,
                               CreateProducerCallback callback);
 
-    void handleSubscribe(const Result result, const LookupDataResultPtr partitionMetadata,
-                         TopicNamePtr topicName, const std::string& consumerName, ConsumerConfiguration conf,
-                         SubscribeCallback callback);
-
-    void handleReaderMetadataLookup(const Result result, const LookupDataResultPtr partitionMetadata,
-                                    TopicNamePtr topicName, MessageId startMessageId,
-                                    ReaderConfiguration conf, ReaderCallback callback);
-
-    void handleGetPartitions(const Result result, const LookupDataResultPtr partitionMetadata,
-                             TopicNamePtr topicName, GetPartitionsCallback callback);
+    void handleSubscribe(const Result result,
+                             const LookupDataResultPtr partitionMetadata,
+                             DestinationNamePtr dn,
+                             const std::string& consumerName,
+                             ConsumerConfiguration conf,
+                             SubscribeCallback callback);
 
     void handleProducerCreated(Result result, ProducerImplBaseWeakPtr producerWeakPtr,
                                CreateProducerCallback callback, ProducerImplBasePtr producer);
     void handleConsumerCreated(Result result, ConsumerImplBaseWeakPtr consumerWeakPtr,
                                SubscribeCallback callback, ConsumerImplBasePtr consumer);
 
-    typedef std::shared_ptr<int> SharedInt;
+    typedef boost::shared_ptr<int> SharedInt;
 
     void handleClose(Result result, SharedInt remaining, ResultCallback callback);
 
-    void createPatternMultiTopicsConsumer(const Result result, const NamespaceTopicsPtr topics,
-                                          const std::string& regexPattern, const std::string& consumerName,
-                                          const ConsumerConfiguration& conf, SubscribeCallback callback);
-
-    enum State
-    {
+    enum State {
         Open,
         Closing,
         Closed
     };
 
-    std::mutex mutex_;
+    boost::mutex mutex_;
 
     State state_;
     std::string serviceUrl_;
@@ -150,6 +127,9 @@ class ClientImpl : public std::enable_shared_from_this<ClientImpl> {
 
     friend class Client;
 };
+
+typedef boost::shared_ptr<ClientImpl> ClientImplPtr;
+
 } /* namespace pulsar */
 
 #endif /* LIB_CLIENTIMPL_H_ */

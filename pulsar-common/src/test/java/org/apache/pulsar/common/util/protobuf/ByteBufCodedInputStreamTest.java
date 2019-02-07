@@ -18,19 +18,22 @@
  */
 package org.apache.pulsar.common.util.protobuf;
 
-import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
+import static org.testng.Assert.assertEquals;
 
 import java.io.IOException;
 
-import org.apache.pulsar.shaded.com.google.protobuf.v241.InvalidProtocolBufferException;
-import org.apache.pulsar.shaded.com.google.protobuf.v241.WireFormat;
+import org.apache.pulsar.common.util.protobuf.ByteBufCodedInputStream;
+import org.apache.pulsar.common.util.protobuf.ByteBufCodedOutputStream;
 import org.testng.annotations.Test;
+
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.protobuf.WireFormat;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 public class ByteBufCodedInputStreamTest {
 
@@ -43,13 +46,8 @@ public class ByteBufCodedInputStreamTest {
         assertFalse(inputStream.skipField(WireFormat.WIRETYPE_END_GROUP));
         inputStream = ByteBufCodedInputStream.get(Unpooled.wrappedBuffer("1000".getBytes()));
         assertTrue(inputStream.skipField(WireFormat.WIRETYPE_FIXED32));
+        assertTrue(inputStream.skipField(WireFormat.WIRETYPE_START_GROUP));
 
-        try {
-            inputStream.skipField(WireFormat.WIRETYPE_START_GROUP);
-            fail("Should not happend");
-        } catch (Exception e) {
-            // pass
-        }
         try {
             assertTrue(inputStream.skipField(-1));
             fail("Should not happend");

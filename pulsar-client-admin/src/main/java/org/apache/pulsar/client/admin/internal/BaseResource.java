@@ -31,7 +31,6 @@ import javax.ws.rs.client.Invocation.Builder;
 import javax.ws.rs.client.InvocationCallback;
 import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
 
 import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.admin.PulsarAdminException.ConflictException;
@@ -44,8 +43,8 @@ import org.apache.pulsar.client.admin.PulsarAdminException.NotFoundException;
 import org.apache.pulsar.client.admin.PulsarAdminException.PreconditionFailedException;
 import org.apache.pulsar.client.admin.PulsarAdminException.ServerSideErrorException;
 import org.apache.pulsar.client.api.Authentication;
+import org.apache.pulsar.client.util.FutureUtil;
 import org.apache.pulsar.common.policies.data.ErrorData;
-import org.apache.pulsar.common.util.FutureUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -154,50 +153,36 @@ public abstract class BaseResource {
             if (e.getCause() instanceof java.net.ConnectException) {
                 return new ConnectException(e.getCause());
             } else {
-                return new PulsarAdminException((ServerErrorException) e);
+                return new HttpErrorException(e);
             }
         } else if (e instanceof WebApplicationException) {
             // Handle 5xx exceptions
             if (e instanceof ServerErrorException) {
                 ServerErrorException see = (ServerErrorException) e;
-                return new ServerSideErrorException(see, e.getMessage());
-            } else if (e instanceof ClientErrorException) {
-                // Handle 4xx exceptions
-                ClientErrorException cee = (ClientErrorException) e;
-                int statusCode = cee.getResponse().getStatus();
-                switch (statusCode) {
-                    case 401:
-                    case 403:
-                        return new NotAuthorizedException(cee);
-                    case 404:
-                        return new NotFoundException(cee);
-                    case 405:
-                        return new NotAllowedException(cee);
-                    case 409:
-                        return new ConflictException(cee);
-                    case 412:
-                        return new PreconditionFailedException(cee);
-                    default:
-                        return new PulsarAdminException(cee);
-                }
-            } else {
-                return new PulsarAdminException((WebApplicationException) e);
+                return new ServerSideErrorException(see);
+            }
+
+            // Handle 4xx exceptions
+            ClientErrorException cee = (ClientErrorException) e;
+            int statusCode = cee.getResponse().getStatus();
+            switch (statusCode) {
+            case 401:
+            case 403:
+                return new NotAuthorizedException(cee);
+            case 404:
+                return new NotFoundException(cee);
+            case 405:
+                return new NotAllowedException(cee);
+            case 409:
+                return new ConflictException(cee);
+            case 412:
+                return new PreconditionFailedException(cee);
+
+            default:
+                return new PulsarAdminException(cee);
             }
         } else {
             return new PulsarAdminException(e);
-        }
-    }
-
-    public WebApplicationException getApiException(Response response) {
-        if (response.getStatusInfo().equals(Response.Status.OK)) {
-            return null;
-        }
-        if (response.getStatus() >= 500) {
-            throw new ServerErrorException(response);
-        } else if (response.getStatus() >= 400) {
-            throw new ClientErrorException(response);
-        } else {
-            throw new WebApplicationException(response);
         }
     }
 

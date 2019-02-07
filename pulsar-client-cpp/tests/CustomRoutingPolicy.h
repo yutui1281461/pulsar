@@ -19,19 +19,14 @@
 #ifndef CUSTOM_ROUTER_POLICY_HEADER_
 #define CUSTOM_ROUTER_POLICY_HEADER_
 
-#include <cstdlib>  // rand()
+#include <cstdlib> // rand()
 #include <boost/algorithm/string.hpp>
-#include <pulsar/DeprecatedException.h>
-
 namespace pulsar {
 class CustomRoutingPolicy : public MessageRoutingPolicy {
-    /** @deprecated */
     int getPartition(const Message& msg) {
-        throw DeprecatedException("Use getPartition(const Message&, const TopicMetadata&) instead.");
+        return 0;
     }
-
-    int getPartition(const Message& msg, const TopicMetadata& topicMetadata) { return 0; }
 };
-}  // namespace pulsar
+}
 
-#endif  // CUSTOM_ROUTER_POLICY_HEADER_
+#endif // CUSTOM_ROUTER_POLICY_HEADER_

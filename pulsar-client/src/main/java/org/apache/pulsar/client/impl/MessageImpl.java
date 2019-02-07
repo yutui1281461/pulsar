@@ -19,7 +19,21 @@
 package org.apache.pulsar.client.impl;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static java.nio.charset.StandardCharsets.UTF_8;
+
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageId;
+import org.apache.pulsar.common.api.Commands;
+import org.apache.pulsar.common.api.proto.PulsarApi;
+import org.apache.pulsar.common.api.proto.PulsarApi.KeyValue;
+import org.apache.pulsar.common.api.proto.PulsarApi.MessageIdData;
+import org.apache.pulsar.common.api.proto.PulsarApi.MessageMetadata;
 
 import com.google.common.collect.Maps;
 
@@ -28,103 +42,57 @@ import io.netty.buffer.Unpooled;
 import io.netty.util.Recycler;
 import io.netty.util.Recycler.Handle;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+public class MessageImpl implements Message {
 
-import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.api.Schema;
-import org.apache.pulsar.common.api.Commands;
-import org.apache.pulsar.common.api.EncryptionContext;
-import org.apache.pulsar.common.api.proto.PulsarApi;
-import org.apache.pulsar.common.api.proto.PulsarApi.KeyValue;
-import org.apache.pulsar.common.api.proto.PulsarApi.MessageMetadata;
-
-public class MessageImpl<T> implements Message<T> {
-
-    protected MessageId messageId;
     private MessageMetadata.Builder msgMetadataBuilder;
+    private MessageId messageId;
     private ClientCnx cnx;
     private ByteBuf payload;
-    private Schema<T> schema;
-    private Optional<EncryptionContext> encryptionCtx = Optional.empty();
 
-    private String topic; // only set for incoming messages
     transient private Map<String, String> properties;
-    private final int redeliveryCount;
 
     // Constructor for out-going message
-    static <T> MessageImpl<T> create(MessageMetadata.Builder msgMetadataBuilder, ByteBuffer payload, Schema<T> schema) {
-        @SuppressWarnings("unchecked")
-        MessageImpl<T> msg = (MessageImpl<T>) RECYCLER.get();
+    static MessageImpl create(MessageMetadata.Builder msgMetadataBuilder, ByteBuffer payload) {
+        MessageImpl msg = RECYCLER.get();
         msg.msgMetadataBuilder = msgMetadataBuilder;
         msg.messageId = null;
-        msg.topic = null;
         msg.cnx = null;
         msg.payload = Unpooled.wrappedBuffer(payload);
-        msg.properties = null;
-        msg.schema = schema;
+        msg.properties = Collections.emptyMap();
         return msg;
     }
 
     // Constructor for incoming message
-    MessageImpl(String topic, MessageIdImpl messageId, MessageMetadata msgMetadata,
-                ByteBuf payload, ClientCnx cnx, Schema<T> schema) {
-        this(topic, messageId, msgMetadata, payload, null, cnx, schema);
-    }
-
-    MessageImpl(String topic, MessageIdImpl messageId, MessageMetadata msgMetadata, ByteBuf payload,
-                Optional<EncryptionContext> encryptionCtx, ClientCnx cnx, Schema<T> schema) {
-        this(topic, messageId, msgMetadata, payload, encryptionCtx, cnx, schema, 0);
-    }
-
-    MessageImpl(String topic, MessageIdImpl messageId, MessageMetadata msgMetadata, ByteBuf payload,
-                Optional<EncryptionContext> encryptionCtx, ClientCnx cnx, Schema<T> schema, int redeliveryCount) {
+    MessageImpl(MessageIdData messageId, MessageMetadata msgMetadata, ByteBuf payload, int partitionIndex,
+            ClientCnx cnx) {
         this.msgMetadataBuilder = MessageMetadata.newBuilder(msgMetadata);
-        this.messageId = messageId;
-        this.topic = topic;
+        this.messageId = new MessageIdImpl(messageId.getLedgerId(), messageId.getEntryId(), partitionIndex);
         this.cnx = cnx;
-        this.redeliveryCount = redeliveryCount;
 
         // Need to make a copy since the passed payload is using a ref-count buffer that we don't know when could
         // release, since the Message is passed to the user. Also, the passed ByteBuf is coming from network and is
         // backed by a direct buffer which we could not expose as a byte[]
         this.payload = Unpooled.copiedBuffer(payload);
-        this.encryptionCtx = encryptionCtx;
 
         if (msgMetadata.getPropertiesCount() > 0) {
-            this.properties = Collections.unmodifiableMap(msgMetadataBuilder.getPropertiesList().stream()
-                    .collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue)));
+            Map<String, String> properties = Maps.newTreeMap();
+            for (KeyValue entry : msgMetadata.getPropertiesList()) {
+                properties.put(entry.getKey(), entry.getValue());
+            }
+
+            this.properties = Collections.unmodifiableMap(properties);
         } else {
             properties = Collections.emptyMap();
         }
-        this.schema = schema;
     }
 
-    MessageImpl(String topic, BatchMessageIdImpl batchMessageIdImpl, MessageMetadata msgMetadata,
-                PulsarApi.SingleMessageMetadata singleMessageMetadata, ByteBuf payload,
-                Optional<EncryptionContext> encryptionCtx, ClientCnx cnx, Schema<T> schema) {
-        this(topic, batchMessageIdImpl, msgMetadata, singleMessageMetadata, payload, encryptionCtx, cnx, schema, 0);
-    }
-
-    MessageImpl(String topic, BatchMessageIdImpl batchMessageIdImpl, MessageMetadata msgMetadata,
-                PulsarApi.SingleMessageMetadata singleMessageMetadata, ByteBuf payload,
-                Optional<EncryptionContext> encryptionCtx, ClientCnx cnx, Schema<T> schema, int redeliveryCount) {
+    MessageImpl(BatchMessageIdImpl batchMessageIdImpl, MessageMetadata msgMetadata,
+            PulsarApi.SingleMessageMetadata singleMessageMetadata, ByteBuf payload, ClientCnx cnx) {
         this.msgMetadataBuilder = MessageMetadata.newBuilder(msgMetadata);
         this.messageId = batchMessageIdImpl;
-        this.topic = topic;
         this.cnx = cnx;
-        this.redeliveryCount = redeliveryCount;
 
         this.payload = Unpooled.copiedBuffer(payload);
-        this.encryptionCtx = encryptionCtx;
 
         if (singleMessageMetadata.getPropertiesCount() > 0) {
             Map<String, String> properties = Maps.newTreeMap();
@@ -135,47 +103,29 @@ public class MessageImpl<T> implements Message<T> {
         } else {
             properties = Collections.emptyMap();
         }
-
-        if (singleMessageMetadata.hasPartitionKey()) {
-            msgMetadataBuilder.setPartitionKeyB64Encoded(singleMessageMetadata.getPartitionKeyB64Encoded());
-            msgMetadataBuilder.setPartitionKey(singleMessageMetadata.getPartitionKey());
-        }
-
-        if (singleMessageMetadata.hasEventTime()) {
-            msgMetadataBuilder.setEventTime(singleMessageMetadata.getEventTime());
-        }
-
-        this.schema = schema;
     }
 
-    public MessageImpl(String topic, String msgId, Map<String, String> properties,
-                       ByteBuf payload, Schema<T> schema) {
-        String[] data = msgId.split(":");
-        long ledgerId = Long.parseLong(data[0]);
-        long entryId = Long.parseLong(data[1]);
-        if (data.length == 3) {
-            this.messageId = new BatchMessageIdImpl(ledgerId, entryId, -1, Integer.parseInt(data[2]));
-        } else {
-            this.messageId = new MessageIdImpl(ledgerId, entryId, -1);
-        }
-        this.topic = topic;
+    public MessageImpl(String msgId, Map<String, String> properties, byte[] payload) {
+        this(msgId, properties, Unpooled.wrappedBuffer(payload));
+    }
+
+    public MessageImpl(String msgId, Map<String, String> properties, ByteBuf payload) {
+        long ledgerId = Long.parseLong(msgId.substring(0, msgId.indexOf(':')));
+        long entryId = Long.parseLong(msgId.substring(msgId.indexOf(':') + 1));
+        this.messageId = new MessageIdImpl(ledgerId, entryId, -1);
         this.cnx = null;
         this.payload = payload;
         this.properties = Collections.unmodifiableMap(properties);
-        this.schema = schema;
-        this.redeliveryCount = 0;
     }
 
-    public static MessageImpl<byte[]> deserialize(ByteBuf headersAndPayload) throws IOException {
-        @SuppressWarnings("unchecked")
-        MessageImpl<byte[]> msg = (MessageImpl<byte[]>) RECYCLER.get();
+    public static MessageImpl deserialize(ByteBuf headersAndPayload) throws IOException {
+        MessageImpl msg = RECYCLER.get();
         MessageMetadata msgMetadata = Commands.parseMessageMetadata(headersAndPayload);
 
         msg.msgMetadataBuilder = MessageMetadata.newBuilder(msgMetadata);
         msgMetadata.recycle();
         msg.payload = headersAndPayload;
         msg.messageId = null;
-        msg.topic = null;
         msg.cnx = null;
         msg.properties = Collections.emptyMap();
         return msg;
@@ -202,15 +152,6 @@ public class MessageImpl<T> implements Message<T> {
         return msgMetadataBuilder.getPublishTime();
     }
 
-    @Override
-    public long getEventTime() {
-        checkNotNull(msgMetadataBuilder);
-        if (msgMetadataBuilder.hasEventTime()) {
-            return msgMetadataBuilder.getEventTime();
-        }
-        return 0;
-    }
-
     public boolean isExpired(int messageTTLInSeconds) {
         return messageTTLInSeconds != 0
                 && System.currentTimeMillis() > (getPublishTime() + TimeUnit.SECONDS.toMillis(messageTTLInSeconds));
@@ -228,29 +169,7 @@ public class MessageImpl<T> implements Message<T> {
         }
     }
 
-    @Override
-    public T getValue() {
-        return schema.decode(getData());
-    }
-
-    public long getSequenceId() {
-        checkNotNull(msgMetadataBuilder);
-        if (msgMetadataBuilder.hasSequenceId()) {
-            return msgMetadataBuilder.getSequenceId();
-        }
-        return -1;
-    }
-
-    @Override
-    public String getProducerName() {
-        checkNotNull(msgMetadataBuilder);
-        if (msgMetadataBuilder.hasProducerName()) {
-            return msgMetadataBuilder.getProducerName();
-        }
-        return null;
-    }
-
-    public ByteBuf getDataBuffer() {
+    ByteBuf getDataBuffer() {
         return payload;
     }
 
@@ -261,21 +180,13 @@ public class MessageImpl<T> implements Message<T> {
     }
 
     @Override
-    public synchronized Map<String, String> getProperties() {
-        if (this.properties == null) {
-            if (msgMetadataBuilder.getPropertiesCount() > 0) {
-                this.properties = Collections.unmodifiableMap(msgMetadataBuilder.getPropertiesList().stream()
-                        .collect(Collectors.toMap(KeyValue::getKey, KeyValue::getValue)));
-            } else {
-                this.properties = Collections.emptyMap();
-            }
-        }
-        return this.properties;
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     @Override
     public boolean hasProperty(String name) {
-        return getProperties().containsKey(name);
+        return properties.containsKey(name);
     }
 
     @Override
@@ -283,7 +194,7 @@ public class MessageImpl<T> implements Message<T> {
         return properties.get(name);
     }
 
-    public MessageMetadata.Builder getMessageBuilder() {
+    MessageMetadata.Builder getMessageBuilder() {
         return msgMetadataBuilder;
     }
 
@@ -294,30 +205,9 @@ public class MessageImpl<T> implements Message<T> {
     }
 
     @Override
-    public String getTopicName() {
-        return topic;
-    }
-
-    @Override
     public String getKey() {
         checkNotNull(msgMetadataBuilder);
         return msgMetadataBuilder.getPartitionKey();
-    }
-
-    @Override
-    public boolean hasBase64EncodedKey() {
-        checkNotNull(msgMetadataBuilder);
-        return msgMetadataBuilder.getPartitionKeyB64Encoded();
-    }
-
-    @Override
-    public byte[] getKeyBytes() {
-        checkNotNull(msgMetadataBuilder);
-        if (hasBase64EncodedKey()) {
-            return Base64.getDecoder().decode(getKey());
-        } else {
-            return getKey().getBytes(UTF_8);
-        }
     }
 
     public ClientCnx getCnx() {
@@ -327,26 +217,24 @@ public class MessageImpl<T> implements Message<T> {
     public void recycle() {
         msgMetadataBuilder = null;
         messageId = null;
-        topic = null;
         payload = null;
         properties = null;
 
         if (recyclerHandle != null) {
-            recyclerHandle.recycle(this);
+            RECYCLER.recycle(this, recyclerHandle);
         }
     }
 
-    private MessageImpl(Handle<MessageImpl<?>> recyclerHandle) {
+    private MessageImpl(Handle recyclerHandle) {
         this.recyclerHandle = recyclerHandle;
-        this.redeliveryCount = 0;
     }
 
-    private Handle<MessageImpl<?>> recyclerHandle;
+    private Handle recyclerHandle;
 
-    private final static Recycler<MessageImpl<?>> RECYCLER = new Recycler<MessageImpl<?>>() {
+    private final static Recycler<MessageImpl> RECYCLER = new Recycler<MessageImpl>() {
         @Override
-        protected MessageImpl<?> newObject(Handle<MessageImpl<?>> handle) {
-            return new MessageImpl<>(handle);
+        protected MessageImpl newObject(Handle handle) {
+            return new MessageImpl(handle);
         }
     };
 
@@ -362,15 +250,5 @@ public class MessageImpl<T> implements Message<T> {
 
     void setMessageId(MessageIdImpl messageId) {
         this.messageId = messageId;
-    }
-
-    @Override
-    public Optional<EncryptionContext> getEncryptionCtx() {
-        return encryptionCtx;
-    }
-
-    @Override
-    public int getRedeliveryCount() {
-        return redeliveryCount;
     }
 }

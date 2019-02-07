@@ -19,17 +19,25 @@
 #include <gtest/gtest.h>
 #include <lib/BlockingQueue.h>
 
-#include <thread>
+#include <boost/thread.hpp>
+#include <boost/date_time/posix_time/posix_time.hpp>
+
+using namespace boost::posix_time;
 
 class ProducerWorker {
-   private:
-    std::thread producerThread_;
+ private:
+    boost::thread producerThread_;
     BlockingQueue<int>& queue_;
 
-   public:
-    ProducerWorker(BlockingQueue<int>& queue) : queue_(queue) {}
+ public:
+    ProducerWorker(BlockingQueue<int>& queue)
+            : queue_(queue) {
 
-    void produce(int number) { producerThread_ = std::thread(&ProducerWorker::pushNumbers, this, number); }
+    }
+
+    void produce(int number) {
+        producerThread_ = boost::thread(&ProducerWorker::pushNumbers, this, number);
+    }
 
     void pushNumbers(int number) {
         for (int i = 1; i <= number; i++) {
@@ -37,18 +45,25 @@ class ProducerWorker {
         }
     }
 
-    void join() { producerThread_.join(); }
+    void join() {
+        producerThread_.join();
+    }
 };
 
 class ConsumerWorker {
-   private:
-    std::thread consumerThread_;
+ private:
+    boost::thread consumerThread_;
     BlockingQueue<int>& queue_;
 
-   public:
-    ConsumerWorker(BlockingQueue<int>& queue) : queue_(queue) {}
+ public:
+    ConsumerWorker(BlockingQueue<int>& queue)
+            : queue_(queue) {
 
-    void consume(int number) { consumerThread_ = std::thread(&ConsumerWorker::popNumbers, this, number); }
+    }
+
+    void consume(int number) {
+        consumerThread_ = boost::thread(&ConsumerWorker::popNumbers, this, number);
+    }
 
     void popNumbers(int number) {
         for (int i = 1; i <= number; i++) {
@@ -57,7 +72,9 @@ class ConsumerWorker {
         }
     }
 
-    void join() { consumerThread_.join(); }
+    void join() {
+        consumerThread_.join();
+    }
 };
 
 TEST(BlockingQueueTest, testBasic) {
@@ -145,8 +162,8 @@ TEST(BlockingQueueTest, testTimeout) {
     size_t size = 5;
     BlockingQueue<int> queue(size);
     int value;
-    bool popReturn = queue.pop(value, std::chrono::seconds(1));
-    std::this_thread::sleep_for(std::chrono::seconds(2));
+    bool popReturn = queue.pop(value, seconds(1));
+    boost::this_thread::sleep(seconds(2));
     ASSERT_FALSE(popReturn);
 }
 

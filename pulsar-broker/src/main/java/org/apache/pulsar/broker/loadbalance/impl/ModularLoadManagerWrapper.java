@@ -18,10 +18,9 @@
  */
 package org.apache.pulsar.broker.loadbalance.impl;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 
 import org.apache.pulsar.broker.PulsarServerException;
 import org.apache.pulsar.broker.PulsarService;
@@ -30,7 +29,7 @@ import org.apache.pulsar.broker.loadbalance.ModularLoadManager;
 import org.apache.pulsar.broker.loadbalance.ResourceUnit;
 import org.apache.pulsar.common.naming.ServiceUnitId;
 import org.apache.pulsar.common.stats.Metrics;
-import org.apache.pulsar.policies.data.loadbalancer.LoadManagerReport;
+import org.apache.pulsar.policies.data.loadbalancer.LoadReport;
 import org.apache.pulsar.policies.data.loadbalancer.ServiceLookupData;
 import org.apache.pulsar.zookeeper.ZooKeeperCache.Deserializer;
 
@@ -56,23 +55,19 @@ public class ModularLoadManagerWrapper implements LoadManager {
 
     @Override
     public void doNamespaceBundleSplit() {
-        loadManager.checkNamespaceBundleSplit();
+        loadManager.doNamespaceBundleSplit();
     }
 
     @Override
-    public LoadManagerReport generateLoadReport() {
-        return loadManager.updateLocalBrokerData();
+    public LoadReport generateLoadReport() {
+        loadManager.updateLocalBrokerData();
+        return null;
     }
 
     @Override
-    public Optional<ResourceUnit> getLeastLoaded(final ServiceUnitId serviceUnit) {
-        Optional<String> leastLoadedBroker = loadManager.selectBrokerForAssignment(serviceUnit);
-        if (leastLoadedBroker.isPresent()) {
-            return Optional.of(new SimpleResourceUnit(String.format("http://%s", leastLoadedBroker.get()),
-                    new PulsarResourceDescription()));
-        } else {
-            return Optional.empty();
-        }
+    public ResourceUnit getLeastLoaded(final ServiceUnitId serviceUnit) {
+        return new SimpleResourceUnit(String.format("http://%s", loadManager.selectBrokerForAssignment(serviceUnit)),
+                new PulsarResourceDescription());
     }
 
     @Override
@@ -118,14 +113,5 @@ public class ModularLoadManagerWrapper implements LoadManager {
     @Override
     public Deserializer<? extends ServiceLookupData> getLoadReportDeserializer() {
         return loadManager.getLoadReportDeserializer();
-    }
-
-    public ModularLoadManager getLoadManager() {
-        return loadManager;
-    }
-
-    @Override
-    public Set<String> getAvailableBrokers() throws Exception {
-        return loadManager.getAvailableBrokers();
     }
 }

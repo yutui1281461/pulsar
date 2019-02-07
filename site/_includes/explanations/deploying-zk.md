@@ -1,28 +1,7 @@
-<!--
-
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
-
--->
-
 Each Pulsar {% popover instance %} relies on two separate ZooKeeper quorums.
 
 * [Local ZooKeeper](#deploying-local-zookeeper) operates at the {% popover cluster %} level and provides cluster-specific configuration management and coordination. Each Pulsar cluster needs to have a dedicated ZooKeeper cluster.
-* [Configuration Store](#deploying-configuration-store) operates at the {% popover instance %} level and provides configuration management for the entire system (and thus across clusters). The configuration store quorum can be provided by an independent cluster of machines or by the same machines used by local ZooKeeper.
+* [Global ZooKeeper](#deploying-global-zookeeper) operates at the {% popover instance %} level and provides configuration management for the entire system (and thus across clusters). The global ZooKeeper quorum can be provided by an independent cluster of machines or by the same machines used by local ZooKeeper.
 
 ### Deploying local ZooKeeper
 
@@ -59,17 +38,19 @@ Once each server has been added to the `zookeeper.conf` configuration and has th
 $ bin/pulsar-daemon start zookeeper
 ```
 
-### Deploying the configuration store {#configuration-store}
+### Deploying global ZooKeeper
 
-The ZooKeeper cluster configured and started up in the section above is a *local* ZooKeeper cluster used to manage a single Pulsar {% popover cluster %}. In addition to a local cluster, however, a full Pulsar {% popover instance %} also requires a {% popover configuration store %} for handling some instance-level configuration and coordination tasks.
+The ZooKeeper cluster configured and started up in the section above is a *local* ZooKeeper cluster used to manage a single Pulsar {% popover cluster %}. In addition to a local cluster, however, a full Pulsar {% popover instance %} also requires a *global* ZooKeeper quorum for handling some instance-level configuration and coordination tasks.
 
-If you're deploying a [single-cluster](#single-cluster-pulsar-instance) instance, then you will not need a separate cluster for the configuration store. If, however, you're deploying a [multi-cluster](#multi-cluster-pulsar-instance) instance, then you should stand up a separate ZooKeeper cluster for configuration tasks.
+If you're deploying a [single-cluster](#single-cluster-pulsar-instance) instance, then you will not need a separate cluster for global ZooKeeper. If, however, you're deploying a [multi-cluster](#multi-cluster-pulsar-instance) instance, then you should stand up a separate ZooKeeper cluster for instance-level tasks.
+
+{% include message.html id="global_cluster" %}
 
 #### Single-cluster Pulsar instance
 
-If your Pulsar {% popover instance %} will consist of just one cluster, then you can deploy a {% popover configuration store %} on the same machines as the local ZooKeeper quorum but running on different TCP ports.
+If your Pulsar {% popover instance %} will consist of just one cluster, then you can deploy {% popover global ZooKeeper %} on the same machines as the local ZooKeeper quorum but running on different TCP ports.
 
-To deploy a ZooKeeper configuration store in a single-cluster instance, add the same ZooKeeper servers used by the local quorom to the configuration file in [`conf/global_zookeeper.conf`](../../reference/Configuration#configuration-store) using the same method for [local ZooKeeper](#local-zookeeper), but make sure to use a different port (2181 is the default for ZooKeeper). Here's an example that uses port 2184 for a three-node ZooKeeper cluster:
+To deploy global ZooKeeper in a single-cluster instance, add the same ZooKeeper servers used by the local quorom to the configuration file in [`conf/global_zookeeper.conf`](../../reference/Configuration#global-zookeeper) using the same method for [local ZooKeeper](#local-zookeeper), but make sure to use a different port (2181 is the default for ZooKeeper). Here's an example that uses port 2184 for a three-node ZooKeeper cluster:
 
 ```properties
 clientPort=2184
@@ -82,12 +63,12 @@ As before, create the `myid` files for each server on `data/global-zookeeper/myi
 
 #### Multi-cluster Pulsar instance
 
-When deploying a global Pulsar instance, with clusters distributed across different geographical regions, the configuration store serves as a highly available and strongly consistent metadata store that can tolerate failures and partitions spanning whole regions.
+When deploying a global Pulsar instance, with clusters distributed across different geographical regions, the global ZooKeeper serves as a highly available and strongly consistent metadata store that can tolerate failures and partitions spanning whole regions.
 
 The key here is to make sure the ZK quorum members are spread across at least 3
 regions and that other regions are running as observers.
 
-Again, given the very low expected load on the configuration store servers, we can
+Again, given the very low expected load on the global ZooKeeper servers, we can
 share the same hosts used for the local ZooKeeper quorum.
 
 For example, let's assume a Pulsar instance with the following clusters `us-west`,
@@ -102,7 +83,7 @@ In this scenario we want to pick the quorum participants from few clusters and
 let all the others be ZK observers. For example, to form a 7 servers quorum, we
 can pick 3 servers from `us-west`, 2 from `us-central` and 2 from `us-east`.
 
-This will guarantee that writes to configuration store will be possible even if one
+This will guarantee that writes to global ZooKeeper will be possible even if one
 of these regions is unreachable.
 
 The ZK configuration in all the servers will look like:
@@ -134,8 +115,8 @@ peerType=observer
 
 ##### Starting the service
 
-Once your configuration store configuration is in place, you can start up the service using [`pulsar-daemon`](../../reference/CliTools#pulsar-daemon)
+Once your global ZooKeeper configuration is in place, you can start up the service using [`pulsar-daemon`](../../reference/CliTools#pulsar-daemon)
 
 ```shell
-$ bin/pulsar-daemon start configuration-store
+$ bin/pulsar-daemon start global-zookeeper
 ```

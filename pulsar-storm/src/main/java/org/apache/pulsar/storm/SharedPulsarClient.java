@@ -18,36 +18,36 @@
  */
 package org.apache.pulsar.storm;
 
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.pulsar.client.api.Consumer;
-import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.PulsarClientException;
-import org.apache.pulsar.client.impl.PulsarClientImpl;
-import org.apache.pulsar.client.impl.conf.ClientConfigurationData;
-import org.apache.pulsar.client.impl.conf.ConsumerConfigurationData;
-import org.apache.pulsar.client.impl.conf.ProducerConfigurationData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Maps;
+import org.apache.pulsar.client.api.ClientConfiguration;
+import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.ConsumerConfiguration;
+import org.apache.pulsar.client.api.Producer;
+import org.apache.pulsar.client.api.ProducerConfiguration;
+
 public class SharedPulsarClient {
     private static final Logger LOG = LoggerFactory.getLogger(SharedPulsarClient.class);
-    private static final ConcurrentMap<String, SharedPulsarClient> instances = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<String, SharedPulsarClient> instances = Maps.newConcurrentMap();
 
     private final String componentId;
-    private final PulsarClientImpl client;
+    private final PulsarClient client;
     private final AtomicInteger counter = new AtomicInteger();
 
-    private Consumer<byte[]> consumer;
-    private Producer<byte[]> producer;
+    private Consumer consumer;
+    private Producer producer;
 
-    private SharedPulsarClient(String componentId, ClientConfigurationData clientConf)
+    private SharedPulsarClient(String componentId, String serviceUrl, ClientConfiguration clientConf)
             throws PulsarClientException {
-        this.client = new PulsarClientImpl(clientConf);
+        this.client = PulsarClient.create(serviceUrl, clientConf);
         this.componentId = componentId;
     }
 
@@ -62,13 +62,13 @@ public class SharedPulsarClient {
      * @return
      * @throws PulsarClientException
      */
-    public static SharedPulsarClient get(String componentId, ClientConfigurationData clientConf)
+    public static SharedPulsarClient get(String componentId, String serviceUrl, ClientConfiguration clientConf)
             throws PulsarClientException {
         AtomicReference<PulsarClientException> exception = new AtomicReference<PulsarClientException>();
         instances.computeIfAbsent(componentId, pulsarClient -> {
             SharedPulsarClient sharedPulsarClient = null;
             try {
-                sharedPulsarClient = new SharedPulsarClient(componentId, clientConf);
+                sharedPulsarClient = new SharedPulsarClient(componentId, serviceUrl, clientConf);
                 LOG.info("[{}] Created a new Pulsar Client.", componentId);
             } catch (PulsarClientException e) {
                 exception.set(e);
@@ -81,41 +81,33 @@ public class SharedPulsarClient {
         return instances.get(componentId);
     }
 
-    public PulsarClientImpl getClient() {
+    public PulsarClient getClient() {
         counter.incrementAndGet();
         return client;
     }
 
-    public Consumer<byte[]> getSharedConsumer(ConsumerConfigurationData<byte[]> consumerConf)
+    public Consumer getSharedConsumer(String topic, String subscription, ConsumerConfiguration consumerConf)
             throws PulsarClientException {
         counter.incrementAndGet();
         synchronized (this) {
             if (consumer == null) {
-                try {
-                    consumer = client.subscribeAsync(consumerConf).join();
-                } catch (CompletionException e) {
-                    throw (PulsarClientException) e.getCause();
-                }
-                LOG.info("[{}] Created a new Pulsar Consumer on {}", componentId, consumerConf.getSingleTopic());
+                consumer = client.subscribe(topic, subscription, consumerConf);
+                LOG.info("[{}] Created a new Pulsar Consumer on {}", componentId, topic);
             } else {
-                LOG.info("[{}] Using a shared consumer on {}", componentId, consumerConf.getSingleTopic());
+                LOG.info("[{}] Using a shared consumer on {}", componentId, topic);
             }
         }
         return consumer;
     }
 
-    public Producer<byte[]> getSharedProducer(ProducerConfigurationData producerConf) throws PulsarClientException {
+    public Producer getSharedProducer(String topic, ProducerConfiguration producerConf) throws PulsarClientException {
         counter.incrementAndGet();
         synchronized (this) {
             if (producer == null) {
-                try {
-                    producer = client.createProducerAsync(producerConf).join();
-                } catch (CompletionException e) {
-                    throw (PulsarClientException) e.getCause();
-                }
-                LOG.info("[{}] Created a new Pulsar Producer on {}", componentId, producerConf.getTopicName());
+                producer = client.createProducer(topic, producerConf);
+                LOG.info("[{}] Created a new Pulsar Producer on {}", componentId, topic);
             } else {
-                LOG.info("[{}] Using a shared producer on {}", componentId, producerConf.getTopicName());
+                LOG.info("[{}] Using a shared producer on {}", componentId, topic);
             }
         }
         return producer;

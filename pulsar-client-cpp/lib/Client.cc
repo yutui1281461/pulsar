@@ -20,7 +20,8 @@
 #include <pulsar/Client.h>
 #include <utility>
 
-#include <memory>
+#include <boost/make_shared.hpp>
+#include <boost/smart_ptr.hpp>
 
 #include "ClientImpl.h"
 #include "Utils.h"
@@ -31,17 +32,21 @@ DECLARE_LOG_OBJECT()
 
 namespace pulsar {
 
-Client::Client(const std::shared_ptr<ClientImpl> impl) : impl_(impl) {}
+Client::Client(const boost::shared_ptr<ClientImpl> impl) : impl_(impl) {
+}
 
 Client::Client(const std::string& serviceUrl)
-    : impl_(std::make_shared<ClientImpl>(serviceUrl, ClientConfiguration(), true)) {}
+        : impl_(boost::make_shared<ClientImpl>(serviceUrl, ClientConfiguration(), true)) {
+}
 
 Client::Client(const std::string& serviceUrl, const ClientConfiguration& clientConfiguration)
-    : impl_(std::make_shared<ClientImpl>(serviceUrl, clientConfiguration, true)) {}
+        : impl_(boost::make_shared<ClientImpl>(serviceUrl, clientConfiguration, true)) {
+}
 
 Client::Client(const std::string& serviceUrl, const ClientConfiguration& clientConfiguration,
                bool poolConnections)
-    : impl_(std::make_shared<ClientImpl>(serviceUrl, clientConfiguration, poolConnections)) {}
+        : impl_(boost::make_shared<ClientImpl>(serviceUrl, clientConfiguration, poolConnections)) {
+}
 
 Result Client::createProducer(const std::string& topic, Producer& producer) {
     return createProducer(topic, ProducerConfiguration(), producer);
@@ -65,7 +70,8 @@ void Client::createProducerAsync(const std::string& topic, ProducerConfiguration
     impl_->createProducerAsync(topic, conf, callback);
 }
 
-Result Client::subscribe(const std::string& topic, const std::string& consumerName, Consumer& consumer) {
+Result Client::subscribe(const std::string& topic, const std::string& consumerName,
+                         Consumer& consumer) {
     return subscribe(topic, consumerName, ConsumerConfiguration(), consumer);
 }
 
@@ -85,82 +91,8 @@ void Client::subscribeAsync(const std::string& topic, const std::string& consume
 
 void Client::subscribeAsync(const std::string& topic, const std::string& consumerName,
                             const ConsumerConfiguration& conf, SubscribeCallback callback) {
-    LOG_INFO("Subscribing on Topic :" << topic);
+    LOG_DEBUG("Topic is :" << topic);
     impl_->subscribeAsync(topic, consumerName, conf, callback);
-}
-
-Result Client::subscribe(const std::vector<std::string>& topics, const std::string& subscriptionName,
-                         Consumer& consumer) {
-    return subscribe(topics, subscriptionName, ConsumerConfiguration(), consumer);
-}
-
-Result Client::subscribe(const std::vector<std::string>& topics, const std::string& subscriptionName,
-                         const ConsumerConfiguration& conf, Consumer& consumer) {
-    Promise<Result, Consumer> promise;
-    subscribeAsync(topics, subscriptionName, conf, WaitForCallbackValue<Consumer>(promise));
-    Future<Result, Consumer> future = promise.getFuture();
-
-    return future.get(consumer);
-}
-
-void Client::subscribeAsync(const std::vector<std::string>& topics, const std::string& subscriptionName,
-                            SubscribeCallback callback) {
-    subscribeAsync(topics, subscriptionName, ConsumerConfiguration(), callback);
-}
-
-void Client::subscribeAsync(const std::vector<std::string>& topics, const std::string& subscriptionName,
-                            const ConsumerConfiguration& conf, SubscribeCallback callback) {
-    impl_->subscribeAsync(topics, subscriptionName, conf, callback);
-}
-
-Result Client::subscribeWithRegex(const std::string& regexPattern, const std::string& subscriptionName,
-                                  Consumer& consumer) {
-    return subscribeWithRegex(regexPattern, subscriptionName, ConsumerConfiguration(), consumer);
-}
-
-Result Client::subscribeWithRegex(const std::string& regexPattern, const std::string& subscriptionName,
-                                  const ConsumerConfiguration& conf, Consumer& consumer) {
-    Promise<Result, Consumer> promise;
-    subscribeWithRegexAsync(regexPattern, subscriptionName, conf, WaitForCallbackValue<Consumer>(promise));
-    Future<Result, Consumer> future = promise.getFuture();
-
-    return future.get(consumer);
-}
-
-void Client::subscribeWithRegexAsync(const std::string& regexPattern, const std::string& subscriptionName,
-                                     SubscribeCallback callback) {
-    subscribeWithRegexAsync(regexPattern, subscriptionName, ConsumerConfiguration(), callback);
-}
-
-void Client::subscribeWithRegexAsync(const std::string& regexPattern, const std::string& subscriptionName,
-                                     const ConsumerConfiguration& conf, SubscribeCallback callback) {
-    impl_->subscribeWithRegexAsync(regexPattern, subscriptionName, conf, callback);
-}
-
-Result Client::createReader(const std::string& topic, const MessageId& startMessageId,
-                            const ReaderConfiguration& conf, Reader& reader) {
-    Promise<Result, Reader> promise;
-    createReaderAsync(topic, startMessageId, conf, WaitForCallbackValue<Reader>(promise));
-    Future<Result, Reader> future = promise.getFuture();
-
-    return future.get(reader);
-}
-
-void Client::createReaderAsync(const std::string& topic, const MessageId& startMessageId,
-                               const ReaderConfiguration& conf, ReaderCallback callback) {
-    impl_->createReaderAsync(topic, startMessageId, conf, callback);
-}
-
-Result Client::getPartitionsForTopic(const std::string& topic, std::vector<std::string>& partitions) {
-    Promise<Result, std::vector<std::string> > promise;
-    getPartitionsForTopicAsync(topic, WaitForCallbackValue<std::vector<std::string> >(promise));
-    Future<Result, std::vector<std::string> > future = promise.getFuture();
-
-    return future.get(partitions);
-}
-
-void Client::getPartitionsForTopicAsync(const std::string& topic, GetPartitionsCallback callback) {
-    impl_->getPartitionsForTopicAsync(topic, callback);
 }
 
 Result Client::close() {
@@ -172,7 +104,12 @@ Result Client::close() {
     return result;
 }
 
-void Client::closeAsync(CloseCallback callback) { impl_->closeAsync(callback); }
+void Client::closeAsync(CloseCallback callback) {
+    impl_->closeAsync(callback);
+}
 
-void Client::shutdown() { impl_->shutdown(); }
-}  // namespace pulsar
+void Client::shutdown() {
+    impl_->shutdown();
+}
+
+}

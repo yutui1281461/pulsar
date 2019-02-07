@@ -45,7 +45,6 @@ public class PersistentTopicInternalStats {
         public long ledgerId;
         public long entries;
         public long size;
-        public boolean offloaded;
     }
 
     public static class CursorStats {
@@ -60,10 +59,6 @@ public class PersistentTopicInternalStats {
         public String individuallyDeletedMessages;
         public String lastLedgerSwitchTimestamp;
         public String state;
-        public long numberOfEntriesSinceFirstNotAckedMessage;
-        public int totalNonContiguousDeletedMessagesRange;
-        
-        public Map<String, Long> properties;
     }
 
 }

@@ -17,9 +17,10 @@
  * under the License.
  */
 #include <iostream>
-#include <thread>
+#include <boost/bind.hpp>
 
 #include <pulsar/Client.h>
+#include <pulsar/MessageBuilder.h>
 
 #include <lib/LogUtils.h>
 
@@ -46,7 +47,7 @@ int main() {
         Message msg = MessageBuilder().setContent("content").setProperty("x", "1").build();
         producer.sendAsync(msg, callback);
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        sleep(1);
     }
 
     client.close();

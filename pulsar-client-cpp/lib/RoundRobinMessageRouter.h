@@ -20,25 +20,21 @@
 #define PULSAR_RR_MESSAGE_ROUTER_HEADER_
 
 #include <pulsar/MessageRoutingPolicy.h>
-#include <pulsar/ProducerConfiguration.h>
-#include <pulsar/TopicMetadata.h>
-#include <mutex>
-#include "Hash.h"
-#include "MessageRouterBase.h"
+#include <boost/functional/hash.hpp>
+#include <boost/thread/mutex.hpp>
 
-#pragma GCC visibility push(default)
 namespace pulsar {
-class RoundRobinMessageRouter : public MessageRouterBase {
-   public:
-    RoundRobinMessageRouter(ProducerConfiguration::HashingScheme hashingScheme);
-    virtual ~RoundRobinMessageRouter();
-    virtual int getPartition(const Message& msg, const TopicMetadata& topicMetadata);
-
-   private:
-    std::mutex mutex_;
-    unsigned int prevPartition_;
-};
-typedef std::unique_lock<std::mutex> Lock;
-}  // namespace pulsar
-#pragma GCC visibility pop
-#endif  // PULSAR_RR_MESSAGE_ROUTER_HEADER_
+    class RoundRobinMessageRouter : public MessageRoutingPolicy {
+    public:
+        RoundRobinMessageRouter (unsigned int numPartitions);
+        virtual ~RoundRobinMessageRouter();
+        virtual int getPartition(const Message& msg);
+    private:
+        boost::mutex mutex_;
+        unsigned int prevPartition_;
+        unsigned int numPartitions_;
+    };
+    typedef boost::hash<std::string> StringHash;
+    typedef boost::unique_lock<boost::mutex> Lock;
+}
+#endif // PULSAR_RR_MESSAGE_ROUTER_HEADER_

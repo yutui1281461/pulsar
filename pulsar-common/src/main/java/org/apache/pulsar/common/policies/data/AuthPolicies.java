@@ -19,29 +19,26 @@
 package org.apache.pulsar.common.policies.data;
 
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Maps;
 
 public class AuthPolicies {
     public final Map<String, Set<AuthAction>> namespace_auth;
     public final Map<String, Map<String, Set<AuthAction>>> destination_auth;
-    public final Map<String, Set<String>> subscription_auth_roles;
 
     public AuthPolicies() {
         namespace_auth = Maps.newTreeMap();
         destination_auth = Maps.newTreeMap();
-        subscription_auth_roles = Maps.newTreeMap();
     }
 
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof AuthPolicies) {
             AuthPolicies other = (AuthPolicies) obj;
-            return Objects.equals(namespace_auth, other.namespace_auth)
-                    && Objects.equals(destination_auth, other.destination_auth)
-                    && Objects.equals(subscription_auth_roles, other.subscription_auth_roles);
+            return Objects.equal(namespace_auth, other.namespace_auth)
+                    && Objects.equal(destination_auth, other.destination_auth);
         }
 
         return false;

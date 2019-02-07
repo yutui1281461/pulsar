@@ -18,28 +18,26 @@
  */
 package org.apache.pulsar.client.impl;
 
-import static org.apache.pulsar.client.util.MathUtils.signSafeMod;
+import java.util.Random;
 
-import org.apache.pulsar.client.api.HashingScheme;
 import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.TopicMetadata;
+import org.apache.pulsar.client.api.MessageRouter;
 
-public class SinglePartitionMessageRouterImpl extends MessageRouterBase {
-
-    private static final long serialVersionUID = 1L;
+public class SinglePartitionMessageRouterImpl implements MessageRouter {
 
     private final int partitionIndex;
+    private final int numPartitions;
 
-    public SinglePartitionMessageRouterImpl(int partitionIndex, HashingScheme hashingScheme) {
-        super(hashingScheme);
-        this.partitionIndex = partitionIndex;
+    public SinglePartitionMessageRouterImpl(int numPartitions) {
+        this.partitionIndex = new Random().nextInt(numPartitions);
+        this.numPartitions = numPartitions;
     }
 
     @Override
-    public int choosePartition(Message<?> msg, TopicMetadata metadata) {
+    public int choosePartition(Message msg) {
         // If the message has a key, it supersedes the single partition routing policy
         if (msg.hasKey()) {
-            return signSafeMod(hash.makeHash(msg.getKey()), metadata.numPartitions());
+            return ((msg.getKey().hashCode() & Integer.MAX_VALUE) % numPartitions);
         }
 
         return partitionIndex;

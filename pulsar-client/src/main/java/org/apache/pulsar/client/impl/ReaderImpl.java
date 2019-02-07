@@ -23,69 +23,57 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
+
 import org.apache.commons.codec.digest.DigestUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.ConsumerConfiguration;
 import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.MessageListener;
 import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.Reader;
+import org.apache.pulsar.client.api.ReaderConfiguration;
 import org.apache.pulsar.client.api.ReaderListener;
-import org.apache.pulsar.client.api.Schema;
 import org.apache.pulsar.client.api.SubscriptionType;
 import org.apache.pulsar.client.impl.ConsumerImpl.SubscriptionMode;
-import org.apache.pulsar.client.impl.conf.ConsumerConfigurationData;
-import org.apache.pulsar.client.impl.conf.ReaderConfigurationData;
-import org.apache.pulsar.common.naming.TopicName;
 
-public class ReaderImpl<T> implements Reader<T> {
+public class ReaderImpl implements Reader {
 
-    private final ConsumerImpl<T> consumer;
+    private final ConsumerImpl consumer;
 
-    public ReaderImpl(PulsarClientImpl client, ReaderConfigurationData<T> readerConfiguration,
-                      ExecutorService listenerExecutor, CompletableFuture<Consumer<T>> consumerFuture, Schema<T> schema) {
+    public ReaderImpl(PulsarClientImpl client, String topic, MessageId startMessageId,
+            ReaderConfiguration readerConfiguration, ExecutorService listenerExecutor,
+            CompletableFuture<Consumer> consumerFuture) {
 
         String subscription = "reader-" + DigestUtils.sha1Hex(UUID.randomUUID().toString()).substring(0, 10);
-        if (StringUtils.isNotBlank(readerConfiguration.getSubscriptionRolePrefix())) {
-            subscription = readerConfiguration.getSubscriptionRolePrefix() + "-" + subscription;
-        }
 
-        ConsumerConfigurationData<T> consumerConfiguration = new ConsumerConfigurationData<>();
-        consumerConfiguration.getTopicNames().add(readerConfiguration.getTopicName());
-        consumerConfiguration.setSubscriptionName(subscription);
+        ConsumerConfiguration consumerConfiguration = new ConsumerConfiguration();
         consumerConfiguration.setSubscriptionType(SubscriptionType.Exclusive);
         consumerConfiguration.setReceiverQueueSize(readerConfiguration.getReceiverQueueSize());
-        consumerConfiguration.setReadCompacted(readerConfiguration.isReadCompacted());
         if (readerConfiguration.getReaderName() != null) {
             consumerConfiguration.setConsumerName(readerConfiguration.getReaderName());
         }
 
         if (readerConfiguration.getReaderListener() != null) {
-            ReaderListener<T> readerListener = readerConfiguration.getReaderListener();
-            consumerConfiguration.setMessageListener(new MessageListener<T>() {
+            ReaderListener readerListener = readerConfiguration.getReaderListener();
+            consumerConfiguration.setMessageListener(new MessageListener() {
                 private static final long serialVersionUID = 1L;
 
                 @Override
-                public void received(Consumer<T> consumer, Message<T> msg) {
+                public void received(Consumer consumer, Message msg) {
                     readerListener.received(ReaderImpl.this, msg);
                     consumer.acknowledgeCumulativeAsync(msg);
                 }
 
                 @Override
-                public void reachedEndOfTopic(Consumer<T> consumer) {
+                public void reachedEndOfTopic(Consumer consumer) {
                     readerListener.reachedEndOfTopic(ReaderImpl.this);
                 }
             });
         }
 
-        consumerConfiguration.setCryptoFailureAction(readerConfiguration.getCryptoFailureAction());
-        if (readerConfiguration.getCryptoKeyReader() != null) {
-            consumerConfiguration.setCryptoKeyReader(readerConfiguration.getCryptoKeyReader());
-        }
-
-        final int partitionIdx = TopicName.getPartitionIndex(readerConfiguration.getTopicName());
-        consumer = new ConsumerImpl<>(client, readerConfiguration.getTopicName(), consumerConfiguration, listenerExecutor,
-                partitionIdx, consumerFuture, SubscriptionMode.NonDurable, readerConfiguration.getStartMessageId(), schema, null);
+        consumer = new ConsumerImpl(client, topic, subscription, consumerConfiguration, listenerExecutor, -1,
+                consumerFuture, SubscriptionMode.NonDurable, startMessageId);
     }
 
     @Override
@@ -93,7 +81,7 @@ public class ReaderImpl<T> implements Reader<T> {
         return consumer.getTopic();
     }
 
-    public ConsumerImpl<T> getConsumer() {
+    ConsumerImpl getConsumer() {
         return consumer;
     }
 
@@ -103,8 +91,8 @@ public class ReaderImpl<T> implements Reader<T> {
     }
 
     @Override
-    public Message<T> readNext() throws PulsarClientException {
-        Message<T> msg = consumer.receive();
+    public Message readNext() throws PulsarClientException {
+        Message msg = consumer.receive();
 
         // Acknowledge message immediately because the reader is based on non-durable subscription. When it reconnects,
         // it will specify the subscription position anyway
@@ -113,8 +101,8 @@ public class ReaderImpl<T> implements Reader<T> {
     }
 
     @Override
-    public Message<T> readNext(int timeout, TimeUnit unit) throws PulsarClientException {
-        Message<T> msg = consumer.receive(timeout, unit);
+    public Message readNext(int timeout, TimeUnit unit) throws PulsarClientException {
+        Message msg = consumer.receive(timeout, unit);
 
         if (msg != null) {
             consumer.acknowledgeCumulativeAsync(msg);
@@ -123,7 +111,7 @@ public class ReaderImpl<T> implements Reader<T> {
     }
 
     @Override
-    public CompletableFuture<Message<T>> readNextAsync() {
+    public CompletableFuture<Message> readNextAsync() {
         return consumer.receiveAsync().thenApply(msg -> {
             consumer.acknowledgeCumulativeAsync(msg);
             return msg;
@@ -140,18 +128,4 @@ public class ReaderImpl<T> implements Reader<T> {
         return consumer.closeAsync();
     }
 
-    @Override
-    public boolean hasMessageAvailable() throws PulsarClientException {
-        return consumer.hasMessageAvailable();
-    }
-
-    @Override
-    public CompletableFuture<Boolean> hasMessageAvailableAsync() {
-        return consumer.hasMessageAvailableAsync();
-    }
-
-    @Override
-    public boolean isConnected() {
-        return consumer.isConnected();
-    }
 }

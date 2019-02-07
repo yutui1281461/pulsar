@@ -18,8 +18,6 @@
  */
 package org.apache.pulsar.common.policies.data;
 
-import java.util.Map;
-
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
@@ -39,33 +37,21 @@ public class ConsumerStats {
 
     /** Number of available message permits for the consumer */
     public int availablePermits;
-
+    
     /** Number of unacknowledged messages for the consumer */
     public int unackedMessages;
-
+    
     /** Flag to verify if consumer is blocked due to reaching threshold of unacked messages */
     public boolean blockedConsumerOnUnackedMsgs;
 
     /** Address of this consumer */
-    private int addressOffset = -1;
-    private int addressLength;
+    public String address;
 
     /** Timestamp of connection */
-    private int connectedSinceOffset = -1;
-    private int connectedSinceLength;
-
+    public String connectedSince;
+    
     /** Client library version */
-    private int clientVersionOffset = -1;
-    private int clientVersionLength;
-
-    /** Metadata (key/value strings) associated with this consumer */
-    public Map<String, String> metadata;
-
-    /**
-     * In order to prevent multiple string object allocation under stats: create a string-buffer that stores data for all string
-     * place-holders
-     */
-    private StringBuilder stringBuffer = new StringBuilder();
+    public String clientVersion;
 
     public ConsumerStats add(ConsumerStats stats) {
         checkNotNull(stats);
@@ -76,49 +62,5 @@ public class ConsumerStats {
         this.unackedMessages += stats.unackedMessages;
         this.blockedConsumerOnUnackedMsgs = stats.blockedConsumerOnUnackedMsgs;
         return this;
-    }
-
-    public String getAddress() {
-        return addressOffset == -1 ? null : stringBuffer.substring(addressOffset, addressOffset + addressLength);
-    }
-
-    public void setAddress(String address) {
-        if (address == null) {
-            this.addressOffset = -1;
-            return;
-        }
-        this.addressOffset = this.stringBuffer.length();
-        this.addressLength = address.length();
-        this.stringBuffer.append(address);
-    }
-
-    public String getConnectedSince() {
-        return connectedSinceOffset == -1 ? null
-                : stringBuffer.substring(connectedSinceOffset, connectedSinceOffset + connectedSinceLength);
-    }
-
-    public void setConnectedSince(String connectedSince) {
-        if (connectedSince == null) {
-            this.connectedSinceOffset = -1;
-            return;
-        }
-        this.connectedSinceOffset = this.stringBuffer.length();
-        this.connectedSinceLength = connectedSince.length();
-        this.stringBuffer.append(connectedSince);
-    }
-
-    public String getClientVersion() {
-        return clientVersionOffset == -1 ? null
-                : stringBuffer.substring(clientVersionOffset, clientVersionOffset + clientVersionLength);
-    }
-
-    public void setClientVersion(String clientVersion) {
-        if (clientVersion == null) {
-            this.clientVersionOffset = -1;
-            return;
-        }
-        this.clientVersionOffset = this.stringBuffer.length();
-        this.clientVersionLength = clientVersion.length();
-        this.stringBuffer.append(clientVersion);
     }
 }

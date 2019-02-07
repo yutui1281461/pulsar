@@ -20,14 +20,13 @@
 #define PULSAR_CLIENTCONFIGURATION_H_
 
 #include <pulsar/Authentication.h>
-#include <pulsar/Logger.h>
-
 #pragma GCC visibility push(default)
 namespace pulsar {
 class PulsarWrapper;
 class ClientConfigurationImpl;
 class ClientConfiguration {
-   public:
+ public:
+
     ClientConfiguration();
     ~ClientConfiguration();
     ClientConfiguration(const ClientConfiguration&);
@@ -90,8 +89,7 @@ class ClientConfiguration {
 
     /**
      * Number of concurrent lookup-requests allowed on each broker-connection to prevent overload on broker.
-     * <i>(default: 50000)</i> It should be configured with higher value only in case of it requires to
-     * produce/subscribe on
+     * <i>(default: 5000)</i> It should be configured with higher value only in case of it requires to produce/subscribe on
      * thousands of topic using created {@link PulsarClient}
      *
      * @param concurrentLookupRequest
@@ -107,7 +105,6 @@ class ClientConfiguration {
      * Initialize the log configuration
      *
      * @param logConfFilePath  path of the configuration file
-     * @deprecated
      */
     ClientConfiguration& setLogConfFilePath(const std::string& logConfFilePath);
 
@@ -116,27 +113,14 @@ class ClientConfiguration {
      */
     const std::string& getLogConfFilePath() const;
 
-    /**
-     * Configure a custom logger backend to route of Pulsar client library
-     * to a different logger implementation.
-     *
-     * By default, log messages are printed on standard output.
-     */
-    ClientConfiguration& setLogger(LoggerFactoryPtr loggerFactory);
-
-    LoggerFactoryPtr getLogger() const;
-
     ClientConfiguration& setUseTls(bool useTls);
     bool isUseTls() const;
 
-    ClientConfiguration& setTlsTrustCertsFilePath(const std::string& tlsTrustCertsFilePath);
+    ClientConfiguration& setTlsTrustCertsFilePath(const std::string &tlsTrustCertsFilePath);
     std::string getTlsTrustCertsFilePath() const;
 
     ClientConfiguration& setTlsAllowInsecureConnection(bool allowInsecure);
     bool isTlsAllowInsecureConnection() const;
-
-    ClientConfiguration& setValidateHostName(bool validateHostName);
-    bool isValidateHostName() const;
 
     /*
      * Initialize stats interval in seconds. Stats are printed and reset after every 'statsIntervalInSeconds'.
@@ -152,11 +136,12 @@ class ClientConfiguration {
     friend class ClientImpl;
     friend class PulsarWrapper;
 
-   private:
+ private:
     const AuthenticationPtr& getAuthPtr() const;
-    std::shared_ptr<ClientConfigurationImpl> impl_;
+    boost::shared_ptr<ClientConfigurationImpl> impl_;
 };
-}  // namespace pulsar
+}
 
 #pragma GCC visibility pop
 #endif /* PULSAR_CLIENTCONFIGURATION_H_ */
+

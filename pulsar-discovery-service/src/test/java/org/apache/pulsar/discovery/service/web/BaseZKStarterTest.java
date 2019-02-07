@@ -50,7 +50,7 @@ public class BaseZKStarterTest {
      * @throws Exception
      */
     protected MockZooKeeper createMockZooKeeper() throws Exception {
-        MockZooKeeper zk = MockZooKeeper.newInstance(MoreExecutors.newDirectExecutorService());
+        MockZooKeeper zk = MockZooKeeper.newInstance(MoreExecutors.sameThreadExecutor());
 
         ZkUtils.createFullPathOptimistic(zk, LOADBALANCE_BROKERS_ROOT,
                 "".getBytes(ZookeeperClientFactoryImpl.ENCODING_SCHEME), ZooDefs.Ids.OPEN_ACL_UNSAFE,

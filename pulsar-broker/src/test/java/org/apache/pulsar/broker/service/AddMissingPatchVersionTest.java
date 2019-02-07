@@ -18,6 +18,7 @@
  */
 package org.apache.pulsar.broker.service;
 
+import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.utils.PulsarBrokerVersionStringUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;

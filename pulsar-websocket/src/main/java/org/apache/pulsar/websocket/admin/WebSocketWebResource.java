@@ -18,7 +18,6 @@
  */
 package org.apache.pulsar.websocket.admin;
 
-import static org.apache.commons.lang3.StringUtils.isBlank;
 import javax.naming.AuthenticationException;
 import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
@@ -27,8 +26,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.UriInfo;
 
-import org.apache.pulsar.broker.authentication.AuthenticationDataHttps;
-import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.naming.DestinationName;
 import org.apache.pulsar.websocket.WebSocketService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,8 +34,7 @@ import org.slf4j.LoggerFactory;
 public class WebSocketWebResource {
 
     public static final String ATTRIBUTE_PROXY_SERVICE_NAME = "webProxyService";
-    public static final String ADMIN_PATH_V1 = "/admin";
-    public static final String ADMIN_PATH_V2 = "/admin/v2";
+    public static final String ADMIN_PATH = "/admin";
 
     @Context
     protected ServletContext servletContext;
@@ -49,9 +46,8 @@ public class WebSocketWebResource {
     protected UriInfo uri;
 
     private WebSocketService socketService;
-
+    
     private String clientId;
-    private AuthenticationDataHttps authData;
 
     protected WebSocketService service() {
         if (socketService == null) {
@@ -66,33 +62,23 @@ public class WebSocketWebResource {
      * @return the web service caller identification
      */
     public String clientAppId() {
-        if (isBlank(clientId)) {
+        if (clientId != null && service().getConfig().isAuthenticationEnabled()) {
             try {
                 clientId = service().getAuthenticationService().authenticateHttpRequest(httpRequest);
             } catch (AuthenticationException e) {
-                if (service().getConfig().isAuthenticationEnabled()) {
-                    throw new RestException(Status.UNAUTHORIZED, "Failed to get clientId from request");
-                }
+                throw new RestException(Status.UNAUTHORIZED, "Failed to get clientId from request");
             }
-
-            if (isBlank(clientId) && service().getConfig().isAuthenticationEnabled()) {
-                throw new RestException(Status.UNAUTHORIZED, "Failed to get auth data from the request");
-            }
+        } else {
+            throw new RestException(Status.UNAUTHORIZED, "Failed to get auth data from the request");
         }
         return clientId;
     }
-
-    public AuthenticationDataHttps authData() {
-        if (authData == null) {
-            authData = new AuthenticationDataHttps(httpRequest);
-        }
-        return authData;
-    }
-
+    
+    
     /**
      * Checks whether the user has Pulsar Super-User access to the system.
      *
-     * @throws RestException
+     * @throws WebApplicationException
      *             if not authorized
      */
     protected void validateSuperUserAccess() {
@@ -110,39 +96,34 @@ public class WebSocketWebResource {
 
     /**
      * Checks if user has super-user access or user is authorized to produce/consume on a given topic
-     *
+     * 
      * @param topic
-     * @throws RestException
+     * @return
      */
-    protected void validateUserAccess(TopicName topic) {
-        boolean isAuthorized = false;
-
+    protected boolean validateUserAccess(DestinationName topic) {
         try {
             validateSuperUserAccess();
-            isAuthorized = true;
+            return true;
         } catch (Exception e) {
             try {
-                isAuthorized = isAuthorized(topic);
+                return isAuthorized(topic);
             } catch (Exception ne) {
                 throw new RestException(ne);
             }
-        }
-
-        if (!isAuthorized) {
-            throw new RestException(Status.UNAUTHORIZED, "Don't have permission to access this topic");
         }
     }
 
     /**
      * Checks if user is authorized to produce/consume on a given topic
-     *
+     * 
      * @param topic
      * @return
      * @throws Exception
      */
-    protected boolean isAuthorized(TopicName topic) throws Exception {
+    protected boolean isAuthorized(DestinationName topic) throws Exception {
         if (service().isAuthorizationEnabled()) {
-            return service().getAuthorizationService().canLookup(topic, clientAppId(), authData());
+            String authRole = clientAppId();
+            return service().getAuthorizationManager().canLookup(topic, authRole);
         }
         return true;
     }

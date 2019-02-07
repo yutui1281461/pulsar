@@ -35,13 +35,4 @@ public class PulsarServerException extends IOException {
         super(message, cause);
     }
 
-    public static class NotFoundException extends PulsarServerException {
-        public NotFoundException(String msg) {
-            super(msg);
-        }
-
-        public NotFoundException(Throwable t) {
-            super(t);
-        }
-    }
 }

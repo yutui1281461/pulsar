@@ -18,17 +18,17 @@
  */
 package org.apache.bookkeeper.mledger.impl;
 
-import com.google.common.base.MoreObjects;
-import com.google.common.collect.Range;
-import java.util.Map;
 import org.apache.bookkeeper.client.BookKeeper;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.CloseCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.DeleteCursorCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.MarkDeleteCallback;
 import org.apache.bookkeeper.mledger.ManagedLedgerConfig;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.bookkeeper.mledger.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Objects;
+import com.google.common.collect.Range;
 
 public class NonDurableCursorImpl extends ManagedCursorImpl {
 
@@ -36,10 +36,7 @@ public class NonDurableCursorImpl extends ManagedCursorImpl {
             PositionImpl startCursorPosition) {
         super(bookkeeper, config, ledger, cursorName);
 
-        // Compare with "latest" position marker by using only the ledger id. Since the C++ client is using 48bits to
-        // store the entryId, it's not able to pass a Long.max() as entryId. In this case there's no point to require
-        // both ledgerId and entryId to be Long.max()
-        if (startCursorPosition == null || startCursorPosition.getLedgerId() == PositionImpl.latest.getLedgerId()) {
+        if (startCursorPosition == null || startCursorPosition.equals(PositionImpl.latest)) {
             // Start from last entry
             initializeCursorPosition(ledger.getLastPositionAndCounter());
         } else if (startCursorPosition.equals(PositionImpl.earliest)) {
@@ -62,9 +59,9 @@ public class NonDurableCursorImpl extends ManagedCursorImpl {
 
         // Initialize the counter such that the difference between the messages written on the ML and the
         // messagesConsumed is equal to the current backlog (negated).
-        long initialBacklog = readPosition.compareTo(lastEntryAndCounter.getLeft()) < 0
-                ? ledger.getNumberOfEntries(Range.closed(readPosition, lastEntryAndCounter.getLeft())) : 0;
-        messagesConsumedCounter = lastEntryAndCounter.getRight() - initialBacklog;
+        long initialBacklog = readPosition.compareTo(lastEntryAndCounter.first) < 0
+                ? ledger.getNumberOfEntries(Range.closed(readPosition, lastEntryAndCounter.first)) : 0;
+        messagesConsumedCounter = lastEntryAndCounter.second - initialBacklog;
     }
 
     @Override
@@ -80,8 +77,8 @@ public class NonDurableCursorImpl extends ManagedCursorImpl {
     }
 
     @Override
-    protected void internalAsyncMarkDelete(final PositionImpl newPosition, Map<String, Long> properties,
-            final MarkDeleteCallback callback, final Object ctx) {
+    protected void internalAsyncMarkDelete(final PositionImpl newPosition, final MarkDeleteCallback callback,
+            final Object ctx) {
         // Bypass persistence of mark-delete position and individually deleted messages info
         callback.markDeleteComplete(ctx);
     }
@@ -114,7 +111,7 @@ public class NonDurableCursorImpl extends ManagedCursorImpl {
 
     @Override
     public synchronized String toString() {
-        return MoreObjects.toStringHelper(this).add("ledger", ledger.getName()).add("ackPos", markDeletePosition)
+        return Objects.toStringHelper(this).add("ledger", ledger.getName()).add("ackPos", markDeletePosition)
                 .add("readPos", readPosition).toString();
     }
 

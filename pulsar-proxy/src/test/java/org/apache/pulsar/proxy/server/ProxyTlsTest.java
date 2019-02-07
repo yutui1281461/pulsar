@@ -25,15 +25,13 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.bookkeeper.test.PortManager;
 import org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest;
-import org.apache.pulsar.broker.authentication.AuthenticationService;
+import org.apache.pulsar.client.api.ClientConfiguration;
 import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.MessageRoutingMode;
 import org.apache.pulsar.client.api.Producer;
+import org.apache.pulsar.client.api.ProducerConfiguration;
 import org.apache.pulsar.client.api.PulsarClient;
-import org.apache.pulsar.client.api.Schema;
-import org.apache.pulsar.common.configuration.PulsarConfigurationLoader;
-import org.apache.pulsar.common.policies.data.TenantInfo;
+import org.apache.pulsar.client.api.ProducerConfiguration.MessageRoutingMode;
 import org.mockito.Mockito;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -41,10 +39,9 @@ import org.testng.annotations.Test;
 
 public class ProxyTlsTest extends MockedPulsarServiceBaseTest {
 
-    private final String TLS_TRUST_CERT_FILE_PATH = "./src/test/resources/authentication/tls/cacert.pem";
-    private final String TLS_PROXY_CERT_FILE_PATH = "./src/test/resources/authentication/tls/server-cert.pem";
-    private final String TLS_PROXY_KEY_FILE_PATH = "./src/test/resources/authentication/tls/server-key.pem";
-    private final String DUMMY_VALUE = "DUMMY_VALUE";
+    private static final String TLS_TRUST_CERT_FILE_PATH = "./src/test/resources/cacert.pem";
+    private static final String TLS_PROXY_CERT_FILE_PATH = "./src/test/resources/proxy-cert.pem";
+    private static final String TLS_PROXY_KEY_FILE_PATH = "./src/test/resources/proxy-key.pem";
 
     private ProxyService proxyService;
     private ProxyConfiguration proxyConfig = new ProxyConfiguration();
@@ -58,14 +55,11 @@ public class ProxyTlsTest extends MockedPulsarServiceBaseTest {
         proxyConfig.setServicePortTls(PortManager.nextFreePort());
         proxyConfig.setWebServicePort(PortManager.nextFreePort());
         proxyConfig.setWebServicePortTls(PortManager.nextFreePort());
+        proxyConfig.setTlsEnabledInProxy(true);
         proxyConfig.setTlsEnabledWithBroker(false);
         proxyConfig.setTlsCertificateFilePath(TLS_PROXY_CERT_FILE_PATH);
         proxyConfig.setTlsKeyFilePath(TLS_PROXY_KEY_FILE_PATH);
-        proxyConfig.setZookeeperServers(DUMMY_VALUE);
-        proxyConfig.setConfigurationStoreServers(DUMMY_VALUE);
-
-        proxyService = Mockito.spy(new ProxyService(proxyConfig, new AuthenticationService(
-                                                            PulsarConfigurationLoader.convertFrom(proxyConfig))));
+        proxyService = Mockito.spy(new ProxyService(proxyConfig));
         doReturn(mockZooKeeperClientFactory).when(proxyService).getZooKeeperClientFactory();
 
         proxyService.start();
@@ -81,10 +75,12 @@ public class ProxyTlsTest extends MockedPulsarServiceBaseTest {
 
     @Test
     public void testProducer() throws Exception {
-        PulsarClient client = PulsarClient.builder()
-                .serviceUrl("pulsar+ssl://localhost:" + proxyConfig.getServicePortTls().get()).enableTls(true)
-                .allowTlsInsecureConnection(false).tlsTrustCertsFilePath(TLS_TRUST_CERT_FILE_PATH).build();
-        Producer<byte[]> producer = client.newProducer(Schema.BYTES).topic("persistent://sample/test/local/topic").create();
+        ClientConfiguration conf = new ClientConfiguration();
+        conf.setUseTls(true);
+        conf.setTlsAllowInsecureConnection(false);
+        conf.setTlsTrustCertsFilePath(TLS_TRUST_CERT_FILE_PATH);
+        PulsarClient client = PulsarClient.create("pulsar+ssl://localhost:" + proxyConfig.getServicePortTls(), conf);
+        Producer producer = client.createProducer("persistent://sample/test/local/topic");
 
         for (int i = 0; i < 10; i++) {
             producer.send("test".getBytes());
@@ -95,25 +91,27 @@ public class ProxyTlsTest extends MockedPulsarServiceBaseTest {
 
     @Test
     public void testPartitions() throws Exception {
-        PulsarClient client = PulsarClient.builder()
-                .serviceUrl("pulsar+ssl://localhost:" + proxyConfig.getServicePortTls().get()).enableTls(true)
-                .allowTlsInsecureConnection(false).tlsTrustCertsFilePath(TLS_TRUST_CERT_FILE_PATH).build();
-        admin.tenants().createTenant("sample", new TenantInfo());
-        admin.topics().createPartitionedTopic("persistent://sample/test/local/partitioned-topic", 2);
+        ClientConfiguration conf = new ClientConfiguration();
+        conf.setUseTls(true);
+        conf.setTlsAllowInsecureConnection(false);
+        conf.setTlsTrustCertsFilePath(TLS_TRUST_CERT_FILE_PATH);
 
-        Producer<byte[]> producer = client.newProducer(Schema.BYTES).topic("persistent://sample/test/local/partitioned-topic")
-                .messageRoutingMode(MessageRoutingMode.RoundRobinPartition).create();
+        PulsarClient client = PulsarClient.create("pulsar://localhost:" + proxyConfig.getServicePortTls(), conf);
+        admin.persistentTopics().createPartitionedTopic("persistent://sample/test/local/partitioned-topic", 2);
+
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setMessageRoutingMode(MessageRoutingMode.RoundRobinPartition);
+        Producer producer = client.createProducer("persistent://sample/test/local/partitioned-topic", producerConf);
 
         // Create a consumer directly attached to broker
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic("persistent://sample/test/local/partitioned-topic")
-                .subscriptionName("my-sub").subscribe();
+        Consumer consumer = pulsarClient.subscribe("persistent://sample/test/local/partitioned-topic", "my-sub");
 
         for (int i = 0; i < 10; i++) {
             producer.send("test".getBytes());
         }
 
         for (int i = 0; i < 10; i++) {
-            Message<byte[]> msg = consumer.receive(1, TimeUnit.SECONDS);
+            Message msg = consumer.receive(1, TimeUnit.SECONDS);
             checkNotNull(msg);
         }
 

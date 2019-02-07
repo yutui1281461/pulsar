@@ -17,22 +17,17 @@
 # under the License.
 #
 
-- title: Pulsar Functions
-  content: Easily deploy lightweight compute logic using developer-friendly APIs without needing to run your own stream processing engine
-  endpoint: functions/quickstart
-  new: true
-
-- title: Proven in production
-  content: Pulsar has run in production at Yahoo scale for over 3 years, with millions of messages per second across millions of topics
-  endpoint: getting-started/ConceptsAndArchitecture
-
 - title: Horizontally scalable
-  content: Seamlessly expand capacity to hundreds of nodes
-  endpoint: getting-started/ConceptsAndArchitecture
+  content: Millions of independent topics and seamless capacity expansion by simply adding machines
+  endpoint: getting-started/ConceptsAndArchitecture/#Architectureoverview
 
 - title: Low latency with durability
   content: Designed for low publish latency (< 5ms) at scale with strong durabilty guarantees
-  endpoint: getting-started/ConceptsAndArchitecture/#architecture-overview
+  endpoint: getting-started/ConceptsAndArchitecture/#Architectureoverview
+
+- title: High throughput
+  content: Proven in production at Yahoo scale with millions of messages per second
+  endpoint: getting-started/ConceptsAndArchitecture/#Architectureoverview
 
 - title: Geo-replication
   content: Designed for configurable replication between data centers across multiple geographic regions
@@ -46,7 +41,7 @@
 - title: Persistent storage
   content: |
         Persistent message storage based on [Apache BookKeeper](http://bookkeeper.apache.org/).
-        Provides IO-level isolation between write and read operations
+        Provides IO level isolation between write and read operations
   endpoint: getting-started/ConceptsAndArchitecture#persistent-storage
 
 - title: Client libraries
@@ -57,4 +52,4 @@
   content: |
         REST Admin API for provisioning, administration, tools and monitoring. Deploy on bare metal
         or [Kubernetes](https://kubernetes.io).
-  endpoint: admin-api/overview
+  endpoint: admin/AdminInterface

@@ -25,19 +25,14 @@
   <parent>
     <groupId>org.apache.pulsar</groupId>
     <artifactId>pulsar</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>1.19-incubating-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
-  <artifactId>pulsar-client-original</artifactId>
+  <artifactId>pulsar-client</artifactId>
   <name>Pulsar Client Java</name>
 
   <dependencies>
-    <dependency>
-      <groupId>org.apache.pulsar</groupId>
-      <artifactId>pulsar-client-api</artifactId>
-      <version>${project.parent.version}</version>
-    </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>pulsar-common</artifactId>
@@ -67,74 +62,7 @@
     <dependency>
       <groupId>com.yahoo.datasketches</groupId>
       <artifactId>sketches-core</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.code.gson</groupId>
-      <artifactId>gson</artifactId>
-    </dependency>
-    
-    <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpclient</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>*</groupId>
-          <artifactId>*</artifactId>
-         </exclusion>
-      </exclusions>
-    </dependency>
-
-    <!--Schema dependencies-->
-
-    <dependency>
-      <groupId>org.apache.avro</groupId>
-      <artifactId>avro</artifactId>
-      <version>${avro.version}</version>
-    </dependency>
-
-    <dependency>
-      <groupId>org.apache.avro</groupId>
-      <artifactId>avro-protobuf</artifactId>
-      <version>${avro.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.protobuf</groupId>
-          <artifactId>protobuf-java</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-
-    <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-      <version>${protobuf3.version}</version>
-      <scope>provided</scope>
-    </dependency>
-
-    <dependency>
-      <groupId>com.fasterxml.jackson.module</groupId>
-      <artifactId>jackson-module-jsonSchema</artifactId>
-    </dependency>
-    
-    <!-- httpclient-hostname-verification depends on below dependencies  --> 
-    <dependency>
-      <groupId>commons-logging</groupId>
-      <artifactId>commons-logging</artifactId>
-      <version>1.1.1</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.httpcomponents</groupId>
-      <artifactId>httpcore</artifactId>
-      <version>4.4.9</version>
-    </dependency>
-
-    <!-- Testing dependencies -->
-    <dependency>
-      <groupId>org.apache.pulsar</groupId>
-      <artifactId>pulsar-functions-proto</artifactId>
-      <version>${project.parent.version}</version>
-      <scope>test</scope>
+      <version>0.6.0 </version>
     </dependency>
   </dependencies>
 
@@ -145,24 +73,116 @@
         <filtering>true</filtering>
       </resource>
     </resources>
-    <!-- Generate protobuf for testing purposes -->
+
     <plugins>
       <plugin>
-        <groupId>org.xolstice.maven.plugins</groupId>
-        <artifactId>protobuf-maven-plugin</artifactId>
-        <version>${protobuf-maven-plugin.version}</version>
-        <configuration>
-          <protocArtifact>com.google.protobuf:protoc:${protoc3.version}:exe:${os.detected.classifier}</protocArtifact>
-          <checkStaleness>true</checkStaleness>
-          <pluginId>grpc-java</pluginId>
-          <pluginArtifact>io.grpc:protoc-gen-grpc-java:${protoc-gen-grpc-java.version}:exe:${os.detected.classifier}
-          </pluginArtifact>
-        </configuration>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
         <executions>
           <execution>
+            <phase>prepare-package</phase>
             <goals>
-              <goal>test-compile</goal>
+              <goal>jar</goal>
             </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <overview>${basedir}/overview.html</overview>
+          <excludePackageNames>org.apache.pulsar.client.impl:org.apache.pulsar.client.impl.auth:org.apache.pulsar.client.util</excludePackageNames>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <!-- Shade all the dependencies to avoid conflicts -->
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>true</createDependencyReducedPom>
+              <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>shaded</shadedClassifierName>
+              <minimizeJar>true</minimizeJar>
+
+              <artifactSet>
+                <includes>
+                  <include>org.apache.commons:commons-lang3</include>
+                  <include>commons-codec:commons-codec</include>
+                  <include>commons-collections:commons-collections</include>
+                  <include>org.asynchttpclient:*</include>
+                  <include>io.netty:netty-codec-http</include>
+                  <include>io.netty:netty-transport-native-epoll</include>
+                  <include>org.reactivestreams:reactive-streams</include>
+                  <include>com.typesafe.netty:netty-reactive-streams</include>
+                  <include>org.javassist:javassist</include>
+                  <include>com.google.protobuf:protobuf-java</include>
+                  <include>com.google.guava:guava</include>
+                  <include>com.google.code.gson:gson</include>
+                  <include>com.fasterxml.jackson.core</include>
+                  <include>io.netty:netty</include>
+                  <include>io.netty:netty-all</include>
+                  <include>org.apache.pulsar:pulsar-common</include>
+                  <include>org.apache.pulsar:pulsar-checksum</include>
+                  <include>net.jpountz.lz4:lz4</include>
+                  <include>com.yahoo.datasketches:sketches-core</include>
+                </includes>
+              </artifactSet>
+              <filters>
+                <filter>
+                  <artifact>net.jpountz.lz4:lz4</artifact>
+                  <includes>
+                    <include>**</include>
+                  </includes>
+                </filter>
+              </filters>
+              <relocations>
+                <relocation>
+                    <pattern>org.asynchttpclient</pattern>
+                    <shadedPattern>org.apache.pulsar.shade.org.asynchttpclient</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.org.apache.commons</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.com.google</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.fasterxml.jackson</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.com.fasterxml.jackson</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>io.netty</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.io.netty</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.pulsar.common</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.org.apache.pulsar.common</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.pulsar.checksum</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.org.apache.pulsar.checksum</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.scurrilous.circe</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.com.scurrilous.circe</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>net.jpountz</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.net.jpountz</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.yahoo.datasketches</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.com.yahoo.datasketches</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
           </execution>
         </executions>
       </plugin>

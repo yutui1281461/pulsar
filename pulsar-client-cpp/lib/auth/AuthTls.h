@@ -16,29 +16,40 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
-#pragma once
+#ifndef PULSAR_AUTH_TLS_H_
+#define PULSAR_AUTH_TLS_H_
 
 #include <pulsar/Authentication.h>
+#include <lib/LogUtils.h>
+#include <iostream>
 #include <string>
 
 namespace pulsar {
-
-const std::string TLS_PLUGIN_NAME = "tls";
-const std::string TLS_JAVA_PLUGIN_NAME = "org.apache.pulsar.client.impl.auth.AuthenticationTls";
-
-class AuthDataTls : public AuthenticationDataProvider {
-   public:
-    AuthDataTls(const std::string& certificatePath, const std::string& privateKeyPath);
-    ~AuthDataTls();
-
-    bool hasDataForTls();
-    std::string getTlsCertificates();
-    std::string getTlsPrivateKey();
-
-   private:
-    std::string tlsCertificate_;
-    std::string tlsPrivateKey_;
-};
-
-}  // namespace pulsar
+    
+    class AuthDataTls : public AuthenticationDataProvider {
+        
+    public:
+        AuthDataTls(ParamMap& params);
+        ~AuthDataTls();
+        bool hasDataForTls();
+        std::string getTlsCertificates();
+        std::string getTlsPrivateKey();
+    private:
+        std::string tlsCertificates_;
+        std::string tlsPrivateKey_;
+    };
+    
+    class AuthTls : public Authentication {
+        
+    public:
+        AuthTls(AuthenticationDataPtr&);
+        ~AuthTls();
+        static AuthenticationPtr create(ParamMap& params);
+        const std::string getAuthMethodName() const;
+        Result getAuthData(AuthenticationDataPtr& authDataTls) const;
+    private:
+        AuthenticationDataPtr authDataTls_;
+    };
+    
+}
+#endif /* PULSAR_AUTH_TLS_H_ */

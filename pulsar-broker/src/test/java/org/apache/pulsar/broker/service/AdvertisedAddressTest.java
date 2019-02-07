@@ -18,19 +18,18 @@
  */
 package org.apache.pulsar.broker.service;
 
-import org.apache.bookkeeper.test.PortManager;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.zookeeper.LocalBookkeeperEnsemble;
 import org.apache.zookeeper.data.Stat;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
-import org.testng.Assert;
-import org.testng.annotations.AfterMethod;
-import org.testng.annotations.BeforeMethod;
-import org.testng.annotations.Test;
 
 public class AdvertisedAddressTest {
 
@@ -43,15 +42,14 @@ public class AdvertisedAddressTest {
 
     private final String advertisedAddress = "pulsar-usc.example.com";
 
-    @BeforeMethod
+    @Before
     public void setup() throws Exception {
-        bkEnsemble = new LocalBookkeeperEnsemble(3, ZOOKEEPER_PORT, () -> PortManager.nextFreePort());
+        bkEnsemble = new LocalBookkeeperEnsemble(3, ZOOKEEPER_PORT, 5001);
         bkEnsemble.start();
         ServiceConfiguration config = new ServiceConfiguration();
         config.setZookeeperServers("127.0.0.1" + ":" + ZOOKEEPER_PORT);
         config.setWebServicePort(BROKER_WEBSERVICE_PORT);
         config.setClusterName("usc");
-        config.setAdvertisedAddress("localhost");
         config.setBrokerServicePort(BROKER_SERVICE_PORT);
         config.setAdvertisedAddress(advertisedAddress);
         config.setManagedLedgerMaxEntriesPerLedger(5);
@@ -60,7 +58,7 @@ public class AdvertisedAddressTest {
         pulsar.start();
     }
 
-    @AfterMethod
+    @After
     public void shutdown() throws Exception {
         pulsar.close();
         bkEnsemble.stop();

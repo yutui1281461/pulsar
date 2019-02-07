@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.zookeeper.ZooDefs.OpCode;
-import org.apache.zookeeper.common.Time;
 import org.apache.zookeeper.server.Request;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -91,7 +90,7 @@ public class FinalRequestProcessorAspect {
         String type = requestTypeMap.getOrDefault(request.type, "unknown");
         requests.labels(type).inc();
 
-        long latencyMs = Time.currentElapsedTime() - request.createTime;
+        long latencyMs = System.currentTimeMillis() - request.createTime;
         String latencyLabel = isWriteRequest(request.type) ? "write" : "read";
         requestsLatency.labels(latencyLabel).observe(latencyMs);
     }

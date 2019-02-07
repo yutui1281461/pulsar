@@ -27,13 +27,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.core.JsonGenerationException;
+
+import org.apache.pulsar.common.policies.data.AuthAction;
+import org.apache.pulsar.common.policies.data.BundlesData;
+import org.apache.pulsar.common.policies.data.Policies;
+import org.apache.pulsar.common.policies.data.PropertyAdmin;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.testng.annotations.Test;
 
-import com.fasterxml.jackson.core.JsonGenerationException;
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -62,14 +67,14 @@ public class PoliciesDataTest {
 
     @Test
     void propertyAdmin() {
-        TenantInfo pa1 = new TenantInfo();
-        pa1.setAdminRoles(Sets.newHashSet("role1", "role2"));
+        PropertyAdmin pa1 = new PropertyAdmin();
+        pa1.setAdminRoles(Lists.newArrayList("role1", "role2"));
         pa1.setAllowedClusters(Sets.newHashSet("use", "usw"));
 
-        assertEquals(pa1, new TenantInfo(Sets.newHashSet("role1", "role2"), Sets.newHashSet("use", "usw")));
+        assertEquals(pa1, new PropertyAdmin(Lists.newArrayList("role1", "role2"), Sets.newHashSet("use", "usw")));
         assertTrue(!pa1.equals(new Object()));
-        assertTrue(!pa1.equals(new TenantInfo()));
-        assertTrue(!pa1.equals(new TenantInfo(Sets.newHashSet("role1", "role3"), Sets.newHashSet("usc"))));
+        assertTrue(!pa1.equals(new PropertyAdmin()));
+        assertTrue(!pa1.equals(new PropertyAdmin(Lists.newArrayList("role1", "role3"), Sets.newHashSet("usc"))));
         assertEquals(pa1.getAdminRoles(), Lists.newArrayList("role1", "role2"));
     }
 

@@ -47,27 +47,8 @@ commands:
     pulsar broker \
       --conf /path/to/broker.conf
   options:
-  - flags: -c, --broker-conf
+  - flags: -c, --conf
     description: Configuration file for the broker
-  - flags: -bc, --bookie-conf
-    description: Configuration file for BookKeeper
-  - flags: -rb, --run-bookie
-    description: Run a BookKeeper bookie on the same host as the Pulsar broker
-    default: 'false'
-  - flags: -ra, --run-bookie-autorecovery
-    description: Run a BookKeeper autorecovery daemon on the same host as the Pulsar broker
-    default: 'false'
-- name: compact-topic
-  description: Run compaction against a Pulsar topic (in a new process)
-  example: |
-    pulsar compact-topic \
-      --topic topic-to-compact
-  options:
-  - flags: -t, --topic
-    description: The Pulsar topic that you would like to compact
-  - flags: -c, --broker-conf
-    description: Configuration file for the broker
-    default: ${pulsarDirectory}/conf/broker.conf
 - name: discovery
   description: Run a discovery server
   example: |
@@ -76,11 +57,11 @@ commands:
   options:
   - flags: -c, --conf
     description: Configuration file for the discovery service
-- name: configuration-store
-  description: Starts up the Pulsar configuration store
+- name: global-zookeeper
+  description: Starts up global ZooKeeper
   options:
   - flags: -c, --conf
-    description: Configuration file for the configuration store
+    description: Configuration file for global ZooKeeper
 - name: initialize-cluster-metadata
   description: One-time cluster metadata initialization
   options:
@@ -90,27 +71,14 @@ commands:
     description: The broker service URL for the new cluster with TLS encryption
   - flags: -c, --cluster
     description: Cluster name
-  - flags: --configuration-store
-    description: The configuration store quorum connection string
+  - flags: -gzk, --global-zookeeper
+    description: The global ZooKeeper quorum connection string
   - flags: -uw, --web-service-url
     description: The web service URL for the new cluster
   - flags: -tw, --web-service-url-tls
     description: The web service URL for the new cluster with TLS encryption
   - flags: -zk, --zookeeper
     description: The local ZooKeeper quorum connection string
-- name: proxy
-  description: Manages the Pulsar proxy
-  example: |
-    pulsar proxy \
-      --zookeeper-servers zk-0,zk-1,zk2 \
-      --configuration-store zk-0,zk-1,zk-2
-  options:
-  - flags: -c, --config
-    description: Path to a Pulsar proxy configuration file
-  - flags: --configuration-store
-    description: Configuration store connection string
-  - flags: -zk, --zookeeper-servers
-    description: Local ZooKeeper connection string
 - name: standalone
   description: Run a broker service with local bookies and local ZooKeeper
   options:
@@ -156,12 +124,10 @@ commands:
   options:
   - flags: -c, --conf
     description: Configuration file for ZooKeeper
-- name: zookeeper-shell
-  description: Opens up a shell client to the ZooKeeper cluster used by Pulsar
 env_vars:
 - name: PULSAR_LOG_CONF
   description: Log4j configuration file
-  default: conf/log4j2.yaml
+  default: conf/log4j.properties
 - name: PULSAR_BROKER_CONF
   description: Configuration file for broker
   default: conf/broker.conf
@@ -171,8 +137,8 @@ env_vars:
 - name: PULSAR_ZK_CONF
   description: Configuration file for zookeeper
   default: conf/zookeeper.conf
-- name: PULSAR_CONFIGURATION_STORE_CONF
-  description:  Configuration file for the configuration store
+- name: PULSAR_GLOBAL_ZK_CONF
+  description:  Configuration file for global zookeeper
   default: conf/global_zookeeper.conf
 - name: PULSAR_DISCOVERY_CONF
   description: Configuration file for discovery service

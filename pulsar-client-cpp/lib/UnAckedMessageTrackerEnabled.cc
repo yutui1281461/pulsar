@@ -18,33 +18,35 @@
  */
 #include "UnAckedMessageTrackerEnabled.h"
 
-#include <functional>
-
 DECLARE_LOG_OBJECT();
 
 namespace pulsar {
+
+void UnAckedMessageTrackerEnabled::timeoutHandler(const boost::system::error_code& ec) {
+    if (ec) {
+        LOG_DEBUG("Ignoring timer cancelled event, code[" << ec <<"]");
+    } else {
+        timeoutHandler();
+    }
+}
 
 void UnAckedMessageTrackerEnabled::timeoutHandler() {
     timeoutHandlerHelper();
     ExecutorServicePtr executorService = client_->getIOExecutorProvider()->get();
     timer_ = executorService->createDeadlineTimer();
     timer_->expires_from_now(boost::posix_time::milliseconds(timeoutMs_));
-    timer_->async_wait([&](const boost::system::error_code& ec) {
-        if (ec) {
-            LOG_DEBUG("Ignoring timer cancelled event, code[" << ec << "]");
-        } else {
-            timeoutHandler();
-        }
-    });
+    timer_->async_wait(
+            boost::bind(&pulsar::UnAckedMessageTrackerEnabled::timeoutHandler, this,
+                        boost::asio::placeholders::error));
 }
 
 void UnAckedMessageTrackerEnabled::timeoutHandlerHelper() {
-    std::lock_guard<std::mutex> acquire(lock_);
-    LOG_DEBUG("UnAckedMessageTrackerEnabled::timeoutHandlerHelper invoked for consumerPtr_ "
-              << consumerReference_.getName().c_str());
+    boost::unique_lock<boost::mutex> acquire(lock_);
+    LOG_DEBUG(
+            "UnAckedMessageTrackerEnabled::timeoutHandlerHelper invoked for consumerPtr_ " << consumerReference_.getName().c_str());
     if (!oldSet_.empty()) {
-        LOG_INFO(consumerReference_.getName().c_str()
-                 << ": " << oldSet_.size() << " Messages were not acked within " << timeoutMs_ << " time");
+        LOG_INFO(
+                consumerReference_.getName().c_str() << ": " << oldSet_.size() << " Messages were not acked within "<< timeoutMs_ <<" time");
         oldSet_.clear();
         currentSet_.clear();
         consumerReference_.redeliverUnacknowledgedMessages();
@@ -52,76 +54,52 @@ void UnAckedMessageTrackerEnabled::timeoutHandlerHelper() {
     oldSet_.swap(currentSet_);
 }
 
-UnAckedMessageTrackerEnabled::UnAckedMessageTrackerEnabled(long timeoutMs, const ClientImplPtr client,
+UnAckedMessageTrackerEnabled::UnAckedMessageTrackerEnabled(long timeoutMs,
+                                                           const ClientImplPtr client,
                                                            ConsumerImplBase& consumer)
-    : consumerReference_(consumer) {
+        : consumerReference_(consumer) {
     timeoutMs_ = timeoutMs;
     client_ = client;
     timeoutHandler();
 }
 
 bool UnAckedMessageTrackerEnabled::add(const MessageId& m) {
-    std::lock_guard<std::mutex> acquire(lock_);
+    boost::unique_lock<boost::mutex> acquire(lock_);
     oldSet_.erase(m);
     return currentSet_.insert(m).second;
 }
 
 bool UnAckedMessageTrackerEnabled::isEmpty() {
-    std::lock_guard<std::mutex> acquire(lock_);
+    boost::unique_lock<boost::mutex> acquire(lock_);
     return oldSet_.empty() && currentSet_.empty();
 }
 
 bool UnAckedMessageTrackerEnabled::remove(const MessageId& m) {
-    std::lock_guard<std::mutex> acquire(lock_);
+    boost::unique_lock<boost::mutex> acquire(lock_);
     return oldSet_.erase(m) || currentSet_.erase(m);
 }
 
 long UnAckedMessageTrackerEnabled::size() {
-    std::lock_guard<std::mutex> acquire(lock_);
+    boost::unique_lock<boost::mutex> acquire(lock_);
     return oldSet_.size() + currentSet_.size();
 }
 
 void UnAckedMessageTrackerEnabled::removeMessagesTill(const MessageId& msgId) {
-    std::lock_guard<std::mutex> acquire(lock_);
+    boost::unique_lock<boost::mutex> acquire(lock_);
     for (std::set<MessageId>::iterator it = oldSet_.begin(); it != oldSet_.end();) {
-        if (*it < msgId && it->partition() == msgId.partition()) {
+        if (*it < msgId && it->partition_ == msgId.partition_) {
             oldSet_.erase(it++);
         } else {
             it++;
         }
     }
     for (std::set<MessageId>::iterator it = currentSet_.begin(); it != currentSet_.end();) {
-        if (*it < msgId && it->partition() == msgId.partition()) {
+        if (*it < msgId && it->partition_ == msgId.partition_) {
             currentSet_.erase(it++);
         } else {
             it++;
         }
     }
-}
-
-// this is only for MultiTopicsConsumerImpl, when un-subscribe a single topic, should remove all it's message.
-void UnAckedMessageTrackerEnabled::removeTopicMessage(const std::string& topic) {
-    for (std::set<MessageId>::iterator it = oldSet_.begin(); it != oldSet_.end();) {
-        const std::string& topicPartitionName = it->getTopicName();
-        if (topicPartitionName.find(topic) != std::string::npos) {
-            oldSet_.erase(it++);
-        } else {
-            it++;
-        }
-    }
-    for (std::set<MessageId>::iterator it = currentSet_.begin(); it != currentSet_.end();) {
-        const std::string& topicPartitionName = it->getTopicName();
-        if (topicPartitionName.find(topic) != std::string::npos) {
-            currentSet_.erase(it++);
-        } else {
-            it++;
-        }
-    }
-}
-
-void UnAckedMessageTrackerEnabled::clear() {
-    currentSet_.clear();
-    oldSet_.clear();
 }
 
 UnAckedMessageTrackerEnabled::~UnAckedMessageTrackerEnabled() {

@@ -23,10 +23,7 @@ import javax.ws.rs.client.WebTarget;
 import org.apache.pulsar.client.admin.BrokerStats;
 import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.apache.pulsar.client.api.Authentication;
-import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.stats.AllocatorStats;
-import org.apache.pulsar.policies.data.loadbalancer.LoadManagerReport;
-import org.apache.pulsar.policies.data.loadbalancer.LocalBrokerData;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -39,19 +36,17 @@ import com.google.gson.JsonObject;
  */
 public class BrokerStatsImpl extends BaseResource implements BrokerStats {
 
-    private final WebTarget adminBrokerStats;
-    private final WebTarget adminV2BrokerStats;
+    private final WebTarget brokerStats;
 
     public BrokerStatsImpl(WebTarget target, Authentication auth) {
         super(auth);
-        adminBrokerStats = target.path("/admin/broker-stats");
-        adminV2BrokerStats = target.path("/admin/v2/broker-stats");
+        brokerStats = target.path("/broker-stats");
     }
     
     @Override
     public JsonArray getMetrics() throws PulsarAdminException {
         try {
-            String json = request(adminV2BrokerStats.path("/metrics")).get(String.class);
+            String json = request(brokerStats.path("/metrics")).get(String.class);
             return new Gson().fromJson(json, JsonArray.class);
         } catch (Exception e) {
             throw getApiException(e);
@@ -61,7 +56,7 @@ public class BrokerStatsImpl extends BaseResource implements BrokerStats {
     @Override
     public AllocatorStats getAllocatorStats(String allocatorName) throws PulsarAdminException {
         try {
-            return request(adminV2BrokerStats.path("/allocator-stats").path(allocatorName)).get(AllocatorStats.class);
+            return request(brokerStats.path("/allocator-stats").path(allocatorName)).get(AllocatorStats.class);
         } catch (Exception e) {
             throw getApiException(e);
         }
@@ -70,7 +65,7 @@ public class BrokerStatsImpl extends BaseResource implements BrokerStats {
     @Override
     public JsonArray getMBeans() throws PulsarAdminException {
         try {
-            String json = request(adminV2BrokerStats.path("/mbeans")).get(String.class);
+            String json = request(brokerStats.path("/mbeans")).get(String.class);
             return new Gson().fromJson(json, JsonArray.class);
         } catch (Exception e) {
             throw getApiException(e);
@@ -78,19 +73,19 @@ public class BrokerStatsImpl extends BaseResource implements BrokerStats {
     }
 
     @Override
-    public JsonObject getTopics() throws PulsarAdminException {
+    public JsonObject getDestinations() throws PulsarAdminException {
         try {
-            String json = request(adminV2BrokerStats.path("/topics")).get(String.class);
+            String json = request(brokerStats.path("/destinations")).get(String.class);
             return new Gson().fromJson(json, JsonObject.class);
         } catch (Exception e) {
             throw getApiException(e);
         }
     }
 
-    @Override
-    public LoadManagerReport getLoadReport() throws PulsarAdminException {
+    public JsonObject getLoadReport() throws PulsarAdminException {
         try {
-            return request(adminV2BrokerStats.path("/load-report")).get(LocalBrokerData.class);
+            String json = request(brokerStats.path("/load-report")).get(String.class);
+            return new Gson().fromJson(json, JsonObject.class);
         } catch (Exception e) {
             throw getApiException(e);
         }
@@ -99,18 +94,19 @@ public class BrokerStatsImpl extends BaseResource implements BrokerStats {
     @Override
     public JsonObject getPendingBookieOpsStats() throws PulsarAdminException {
         try {
-            String json = request(adminV2BrokerStats.path("/bookieops")).get(String.class);
+            String json = request(brokerStats.path("/bookieops")).get(String.class);
             return new Gson().fromJson(json, JsonObject.class);
         } catch (Exception e) {
             throw getApiException(e);
         }
     }
 
-    public JsonObject getBrokerResourceAvailability(String namespace) throws PulsarAdminException {
+    public JsonObject getBrokerResourceAvailability(String property, String cluster, String namespace)
+            throws PulsarAdminException {
         try {
-            NamespaceName ns = NamespaceName.get(namespace);
-            WebTarget admin = ns.isV2() ? adminV2BrokerStats : adminBrokerStats;
-            String json = request(admin.path("/broker-resource-availability").path(ns.toString())).get(String.class);
+            String json = request(
+                    brokerStats.path("/broker-resource-availability").path(property).path(cluster).path(namespace))
+                            .get(String.class);
             return new Gson().fromJson(json, JsonObject.class);
         } catch (Exception e) {
             throw getApiException(e);

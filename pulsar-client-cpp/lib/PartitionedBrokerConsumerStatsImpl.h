@@ -23,18 +23,19 @@
 #include <iostream>
 #include <vector>
 #include <pulsar/Result.h>
-#include <functional>
+#include <boost/function.hpp>
 #include <boost/date_time/microsec_time_clock.hpp>
 #include <lib/BrokerConsumerStatsImpl.h>
-
+#include <boost/shared_ptr.hpp>
+#include <boost/make_shared.hpp>
 #pragma GCC visibility push(default)
 namespace pulsar {
 class PartitionedBrokerConsumerStatsImpl : public BrokerConsumerStatsImplBase {
-   private:
+ private:
     std::vector<BrokerConsumerStats> statsList_;
     static const std::string DELIMITER;
+ public:
 
-   public:
     PartitionedBrokerConsumerStatsImpl(size_t size);
 
     /** Returns true if the Stats are still valid **/
@@ -83,9 +84,10 @@ class PartitionedBrokerConsumerStatsImpl : public BrokerConsumerStatsImplBase {
 
     void clear();
 
-    friend std::ostream &operator<<(std::ostream &os, const PartitionedBrokerConsumerStatsImpl &obj);
+    friend std::ostream& operator<<(std::ostream &os, const PartitionedBrokerConsumerStatsImpl &obj);
 };
-typedef std::shared_ptr<PartitionedBrokerConsumerStatsImpl> PartitionedBrokerConsumerStatsPtr;
-}  // namespace pulsar
+typedef boost::shared_ptr<PartitionedBrokerConsumerStatsImpl> PartitionedBrokerConsumerStatsPtr;
+
+}
 #pragma GCC visibility pop
-#endif  // PULSAR_CPP_BROKERCONSUMERSTATSIMPL_H
+#endif //PULSAR_CPP_BROKERCONSUMERSTATSIMPL_H

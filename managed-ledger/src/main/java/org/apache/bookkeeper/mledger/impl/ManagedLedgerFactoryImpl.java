@@ -18,32 +18,29 @@
  */
 package org.apache.bookkeeper.mledger.impl;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static org.apache.bookkeeper.mledger.ManagedLedgerException.getManagedLedgerException;
+import static com.google.common.base.Preconditions.checkNotNull;
 
-import com.google.common.base.Predicates;
-import com.google.common.collect.Maps;
-
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.bookkeeper.client.BKException;
 import org.apache.bookkeeper.client.BookKeeper;
-import org.apache.bookkeeper.common.util.OrderedExecutor;
-import org.apache.bookkeeper.common.util.OrderedScheduler;
 import org.apache.bookkeeper.conf.ClientConfiguration;
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.ManagedLedgerInfoCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.OpenLedgerCallback;
-import org.apache.bookkeeper.mledger.AsyncCallbacks.OpenReadOnlyCursorCallback;
 import org.apache.bookkeeper.mledger.ManagedLedger;
 import org.apache.bookkeeper.mledger.ManagedLedgerConfig;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
@@ -56,22 +53,25 @@ import org.apache.bookkeeper.mledger.ManagedLedgerInfo.CursorInfo;
 import org.apache.bookkeeper.mledger.ManagedLedgerInfo.LedgerInfo;
 import org.apache.bookkeeper.mledger.ManagedLedgerInfo.MessageRangeInfo;
 import org.apache.bookkeeper.mledger.ManagedLedgerInfo.PositionInfo;
-import org.apache.bookkeeper.mledger.Position;
-import org.apache.bookkeeper.mledger.ReadOnlyCursor;
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl.ManagedLedgerInitializeLedgerCallback;
 import org.apache.bookkeeper.mledger.impl.ManagedLedgerImpl.State;
 import org.apache.bookkeeper.mledger.impl.MetaStore.MetaStoreCallback;
 import org.apache.bookkeeper.mledger.impl.MetaStore.Stat;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats;
-import org.apache.bookkeeper.mledger.proto.MLDataFormats.LongProperty;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.ManagedCursorInfo;
 import org.apache.bookkeeper.mledger.proto.MLDataFormats.MessageRange;
 import org.apache.bookkeeper.mledger.util.Futures;
-import org.apache.bookkeeper.zookeeper.ZooKeeperClient;
-import org.apache.pulsar.common.util.DateFormatter;
+import org.apache.bookkeeper.util.OrderedSafeExecutor;
+import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.ZooKeeper.States;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Predicates;
+import com.google.common.collect.Maps;
+
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
     private final MetaStore store;
@@ -79,8 +79,9 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
     private final boolean isBookkeeperManaged;
     private final ZooKeeper zookeeper;
     private final ManagedLedgerFactoryConfig config;
-    protected final OrderedScheduler scheduledExecutor;
-    private final OrderedExecutor orderedExecutor;
+    protected final ScheduledExecutorService executor = Executors.newScheduledThreadPool(16,
+            new DefaultThreadFactory("bookkeeper-ml"));
+    private final OrderedSafeExecutor orderedExecutor = new OrderedSafeExecutor(16, "bookkeeper-ml-workers");
 
     protected final ManagedLedgerFactoryMBeanImpl mbean;
 
@@ -95,20 +96,34 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
         this(bkClientConfiguration, new ManagedLedgerFactoryConfig());
     }
 
-    @SuppressWarnings("deprecation")
     public ManagedLedgerFactoryImpl(ClientConfiguration bkClientConfiguration, ManagedLedgerFactoryConfig config)
             throws Exception {
-        this(ZooKeeperClient.newBuilder()
-                .connectString(bkClientConfiguration.getZkServers())
-                .sessionTimeoutMs(bkClientConfiguration.getZkTimeout())
-                .build(), bkClientConfiguration, config);
-    }
+        final CountDownLatch counter = new CountDownLatch(1);
+        final String zookeeperQuorum = checkNotNull(bkClientConfiguration.getZkServers());
 
-    private ManagedLedgerFactoryImpl(ZooKeeper zkc, ClientConfiguration bkClientConfiguration,
-            ManagedLedgerFactoryConfig config)
-            throws Exception {
-        this(new BookKeeper(bkClientConfiguration, zkc), true /* isBookkeeperManaged */, zkc,
-                config);
+        zookeeper = new ZooKeeper(zookeeperQuorum, bkClientConfiguration.getZkTimeout(), event -> {
+            if (event.getState().equals(Watcher.Event.KeeperState.SyncConnected)) {
+                log.info("Connected to zookeeper");
+                counter.countDown();
+            } else {
+                log.error("Error connecting to zookeeper {}", event);
+            }
+        });
+
+        if (!counter.await(bkClientConfiguration.getZkTimeout(), TimeUnit.MILLISECONDS)
+                || zookeeper.getState() != States.CONNECTED) {
+            throw new ManagedLedgerException("Error connecting to ZooKeeper at '" + zookeeperQuorum + "'");
+        }
+
+        this.bookKeeper = new BookKeeper(bkClientConfiguration, zookeeper);
+        this.isBookkeeperManaged = true;
+
+        this.store = new MetaStoreImplZookeeper(zookeeper, orderedExecutor);
+
+        this.config = config;
+        this.mbean = new ManagedLedgerFactoryMBeanImpl(this);
+        this.entryCacheManager = new EntryCacheManager(this);
+        this.statsTask = executor.scheduleAtFixedRate(() -> refreshStats(), 0, StatsPeriodSeconds, TimeUnit.SECONDS);
     }
 
     public ManagedLedgerFactoryImpl(BookKeeper bookKeeper, ZooKeeper zooKeeper) throws Exception {
@@ -117,28 +132,14 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
 
     public ManagedLedgerFactoryImpl(BookKeeper bookKeeper, ZooKeeper zooKeeper, ManagedLedgerFactoryConfig config)
             throws Exception {
-        this(bookKeeper, false /* isBookkeeperManaged */, zooKeeper, config);
-    }
-
-    private ManagedLedgerFactoryImpl(BookKeeper bookKeeper, boolean isBookkeeperManaged, ZooKeeper zooKeeper,
-            ManagedLedgerFactoryConfig config) throws Exception {
-        scheduledExecutor = OrderedScheduler.newSchedulerBuilder()
-                .numThreads(config.getNumManagedLedgerSchedulerThreads())
-                .name("bookkeeper-ml-scheduler")
-                .build();
-        orderedExecutor = OrderedExecutor.newBuilder()
-                .numThreads(config.getNumManagedLedgerWorkerThreads())
-                .name("bookkeeper-ml-workers")
-                .build();
-
         this.bookKeeper = bookKeeper;
-        this.isBookkeeperManaged = isBookkeeperManaged;
-        this.zookeeper = isBookkeeperManaged ? zooKeeper : null;
+        this.isBookkeeperManaged = false;
+        this.zookeeper = null;
         this.store = new MetaStoreImplZookeeper(zooKeeper, orderedExecutor);
         this.config = config;
         this.mbean = new ManagedLedgerFactoryMBeanImpl(this);
         this.entryCacheManager = new EntryCacheManager(this);
-        this.statsTask = scheduledExecutor.scheduleAtFixedRate(() -> refreshStats(), 0, StatsPeriodSeconds, TimeUnit.SECONDS);
+        this.statsTask = executor.scheduleAtFixedRate(() -> refreshStats(), 0, StatsPeriodSeconds, TimeUnit.SECONDS);
     }
 
     private synchronized void refreshStats() {
@@ -157,7 +158,7 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
     }
 
     /**
-     * Helper for getting stats.
+     * Helper for getting stats
      *
      * @return
      */
@@ -232,7 +233,7 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
         ledgers.computeIfAbsent(name, (mlName) -> {
             // Create the managed ledger
             CompletableFuture<ManagedLedgerImpl> future = new CompletableFuture<>();
-            final ManagedLedgerImpl newledger = new ManagedLedgerImpl(this, bookKeeper, store, config, scheduledExecutor,
+            final ManagedLedgerImpl newledger = new ManagedLedgerImpl(this, bookKeeper, store, config, executor,
                     orderedExecutor, name);
             newledger.initialize(new ManagedLedgerInitializeLedgerCallback() {
                 @Override
@@ -256,64 +257,6 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
         });
     }
 
-
-
-    @Override
-    public ReadOnlyCursor openReadOnlyCursor(String managedLedgerName, Position startPosition, ManagedLedgerConfig config)
-            throws InterruptedException, ManagedLedgerException {
-        class Result {
-            ReadOnlyCursor c = null;
-            ManagedLedgerException e = null;
-        }
-        final Result r = new Result();
-        final CountDownLatch latch = new CountDownLatch(1);
-        asyncOpenReadOnlyCursor(managedLedgerName, startPosition, config, new OpenReadOnlyCursorCallback() {
-            @Override
-            public void openReadOnlyCursorComplete(ReadOnlyCursor cursor, Object ctx) {
-                r.c = cursor;
-                latch.countDown();
-            }
-
-            @Override
-            public void openReadOnlyCursorFailed(ManagedLedgerException exception, Object ctx) {
-                r.e = exception;
-                latch.countDown();
-            }
-        }, null);
-
-        latch.await();
-
-        if (r.e != null) {
-            throw r.e;
-        }
-        return r.c;
-    }
-
-    @Override
-    public void asyncOpenReadOnlyCursor(String managedLedgerName, Position startPosition, ManagedLedgerConfig config,
-            OpenReadOnlyCursorCallback callback, Object ctx) {
-        checkArgument(startPosition instanceof PositionImpl);
-        ReadOnlyManagedLedgerImpl roManagedLedger = new ReadOnlyManagedLedgerImpl(this, bookKeeper, store, config,
-                scheduledExecutor, orderedExecutor, managedLedgerName);
-
-        roManagedLedger.initializeAndCreateCursor((PositionImpl) startPosition).thenAccept(roCursor -> {
-            callback.openReadOnlyCursorComplete(roCursor, ctx);
-        }).exceptionally(ex -> {
-            Throwable t = ex;
-            if (t instanceof CompletionException) {
-                t = ex.getCause();
-            }
-
-            if (t instanceof ManagedLedgerException) {
-                callback.openReadOnlyCursorFailed((ManagedLedgerException) t, ctx);
-            } else {
-                callback.openReadOnlyCursorFailed(new ManagedLedgerException(t), ctx);
-            }
-
-            return null;
-        });
-    }
-
     void close(ManagedLedger ledger) {
         // Remove the ledger from the internal factory cache
         ledgers.remove(ledger.getName());
@@ -331,7 +274,6 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
         for (CompletableFuture<ManagedLedgerImpl> ledgerFuture : ledgers.values()) {
             ManagedLedgerImpl ledger = ledgerFuture.getNow(null);
             if (ledger == null) {
-                latch.countDown();
                 continue;
             }
 
@@ -364,7 +306,7 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
             }
         }
 
-        scheduledExecutor.shutdown();
+        executor.shutdown();
         orderedExecutor.shutdown();
 
         entryCacheManager.clear();
@@ -402,14 +344,13 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
 
     @Override
     public void asyncGetManagedLedgerInfo(String name, ManagedLedgerInfoCallback callback, Object ctx) {
-        store.getManagedLedgerInfo(name, false /* createIfMissing */,
-                new MetaStoreCallback<MLDataFormats.ManagedLedgerInfo>() {
+        store.getManagedLedgerInfo(name, new MetaStoreCallback<MLDataFormats.ManagedLedgerInfo>() {
             @Override
             public void operationComplete(MLDataFormats.ManagedLedgerInfo pbInfo, Stat stat) {
                 ManagedLedgerInfo info = new ManagedLedgerInfo();
                 info.version = stat.getVersion();
-                info.creationDate = DateFormatter.format(stat.getCreationTimestamp());
-                info.modificationDate = DateFormatter.format(stat.getModificationTimestamp());
+                info.creationDate = DATE_FORMAT.format(Instant.ofEpochMilli(stat.getCreationTimestamp()));
+                info.modificationDate = DATE_FORMAT.format(Instant.ofEpochMilli(stat.getModificationTimestamp()));
 
                 info.ledgers = new ArrayList<>(pbInfo.getLedgerInfoCount());
                 if (pbInfo.hasTerminatedPosition()) {
@@ -443,9 +384,10 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
                                         public void operationComplete(ManagedCursorInfo pbCursorInfo, Stat stat) {
                                             CursorInfo cursorInfo = new CursorInfo();
                                             cursorInfo.version = stat.getVersion();
-                                            cursorInfo.creationDate = DateFormatter.format(stat.getCreationTimestamp());
-                                            cursorInfo.modificationDate = DateFormatter
-                                                    .format(stat.getModificationTimestamp());
+                                            cursorInfo.creationDate = DATE_FORMAT
+                                                    .format(Instant.ofEpochMilli(stat.getCreationTimestamp()));
+                                            cursorInfo.modificationDate = DATE_FORMAT
+                                                    .format(Instant.ofEpochMilli(stat.getModificationTimestamp()));
 
                                             cursorInfo.cursorsLedgerId = pbCursorInfo.getCursorsLedgerId();
 
@@ -453,14 +395,6 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
                                                 cursorInfo.markDelete = new PositionInfo();
                                                 cursorInfo.markDelete.ledgerId = pbCursorInfo.getMarkDeleteLedgerId();
                                                 cursorInfo.markDelete.entryId = pbCursorInfo.getMarkDeleteEntryId();
-                                            }
-
-                                            if (pbCursorInfo.getPropertiesCount() > 0) {
-                                                cursorInfo.properties = Maps.newTreeMap();
-                                                for (int i = 0; i < pbCursorInfo.getPropertiesCount(); i++) {
-                                                    LongProperty property = pbCursorInfo.getProperties(i);
-                                                    cursorInfo.properties.put(property.getName(), property.getValue());
-                                                }
                                             }
 
                                             if (pbCursorInfo.getIndividualDeletedMessagesCount() > 0) {
@@ -492,7 +426,7 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
                             // Completed all the cursors info
                             callback.getInfoComplete(info, ctx);
                         }).exceptionally((ex) -> {
-                            callback.getInfoFailed(getManagedLedgerException(ex.getCause()), ctx);
+                            callback.getInfoFailed(new ManagedLedgerException(ex), ctx);
                             return null;
                         });
                     }
@@ -532,4 +466,6 @@ public class ManagedLedgerFactoryImpl implements ManagedLedgerFactory {
     }
 
     private static final Logger log = LoggerFactory.getLogger(ManagedLedgerFactoryImpl.class);
+
+    private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSSZ").withZone(ZoneId.systemDefault());
 }

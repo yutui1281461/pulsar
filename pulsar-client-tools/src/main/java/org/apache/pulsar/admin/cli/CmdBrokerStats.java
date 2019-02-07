@@ -26,7 +26,6 @@ import java.util.List;
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.common.stats.AllocatorStats;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
-import org.apache.pulsar.policies.data.loadbalancer.LoadManagerReport;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -87,23 +86,14 @@ public class CmdBrokerStats extends CmdBase {
 
     }
 
-    @Parameters(commandDescription = "dump broker load-report")
-    public class CmdLoadReport extends CliCommand {
-
-        @Override
-        void run() throws Exception {
-            print(admin.brokerStats().getLoadReport());
-        }
-    }
-
-    @Parameters(commandDescription = "dump topics stats")
-    public class CmdTopics extends CliCommand {
+    @Parameters(commandDescription = "dump destination stats")
+    public class CmdDestinations extends CliCommand {
         @Parameter(names = { "-i", "--indent" }, description = "Indent JSON output", required = false)
         boolean indent = false;
 
         @Override
         void run() throws Exception {
-            JsonObject result = admin.brokerStats().getTopics();
+            JsonObject result = admin.brokerStats().getDestinations();
             JsonWriter jsonWriter = new JsonWriter(out);
             if (indent) {
                 jsonWriter.setIndent(DEFAULT_INDENTATION);
@@ -134,9 +124,8 @@ public class CmdBrokerStats extends CmdBase {
         super("broker-stats", admin);
         jcommander.addCommand("monitoring-metrics", new CmdMonitoringMetrics());
         jcommander.addCommand("mbeans", new CmdDumpMBeans());
-        jcommander.addCommand("topics", new CmdTopics(), "destinations");
+        jcommander.addCommand("destinations", new CmdDestinations());
         jcommander.addCommand("allocator-stats", new CmdAllocatorStats());
-        jcommander.addCommand("load-report", new CmdLoadReport());
     }
 
     public void addCommands(String commandName, CliCommand cliCommand) {

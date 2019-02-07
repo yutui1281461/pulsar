@@ -18,7 +18,6 @@
  */
 package org.apache.pulsar.broker.service;
 
-import org.apache.pulsar.broker.service.schema.IncompatibleSchemaException;
 import org.apache.pulsar.common.api.proto.PulsarApi;
 
 /**
@@ -42,21 +41,9 @@ public class BrokerServiceException extends Exception {
         }
     }
 
-    public static class ProducerBusyException extends BrokerServiceException {
-        public ProducerBusyException(String msg) {
-            super(msg);
-        }
-    }
-
     public static class ServiceUnitNotReadyException extends BrokerServiceException {
         public ServiceUnitNotReadyException(String msg) {
             super(msg);
-        }
-    }
-
-    public static class TopicClosedException extends BrokerServiceException {
-        public TopicClosedException(Throwable t) {
-            super(t);
         }
     }
 
@@ -140,17 +127,9 @@ public class BrokerServiceException extends Exception {
         }
     }
 
-    public static class AlreadyRunningException extends BrokerServiceException {
-        public AlreadyRunningException(String msg) {
-            super(msg);
-        }
-    }
-
     public static PulsarApi.ServerError getClientErrorCode(Throwable t) {
         if (t instanceof ServerMetadataException) {
             return PulsarApi.ServerError.MetadataError;
-        } else if (t instanceof NamingException) {
-            return PulsarApi.ServerError.ProducerBusy;
         } else if (t instanceof PersistenceException) {
             return PulsarApi.ServerError.PersistenceError;
         } else if (t instanceof ConsumerBusyException) {
@@ -164,8 +143,6 @@ public class BrokerServiceException extends Exception {
         } else if (t instanceof ServiceUnitNotReadyException || t instanceof TopicFencedException
                 || t instanceof SubscriptionFencedException) {
             return PulsarApi.ServerError.ServiceNotReady;
-        } else if (t instanceof IncompatibleSchemaException) {
-            return PulsarApi.ServerError.IncompatibleSchema;
         } else {
             return PulsarApi.ServerError.UnknownError;
         }

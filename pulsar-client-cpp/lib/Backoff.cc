@@ -17,43 +17,24 @@
  * under the License.
  */
 #include "Backoff.h"
+#include <algorithm>
 
 namespace pulsar {
 
-Backoff::Backoff(const TimeDuration& initial, const TimeDuration& max, const TimeDuration& mandatoryStop)
-    : initial_(initial),
-      max_(max),
-      next_(initial),
-      mandatoryStopMade_(false),
-      mandatoryStop_(mandatoryStop),
-      randomSeed_(time(NULL)) {}
+Backoff::Backoff(const TimeDuration& initial, const TimeDuration& max)
+        : initial_(initial),
+          max_(max),
+          next_(initial) {
+}
 
 TimeDuration Backoff::next() {
     TimeDuration current = next_;
     next_ = std::min(next_ * 2, max_);
-
-    // Check for mandatory stop
-    if (!mandatoryStopMade_) {
-        const boost::posix_time::ptime& now = boost::posix_time::microsec_clock::universal_time();
-        TimeDuration timeElapsedSinceFirstBackoff = boost::posix_time::milliseconds(0);
-        if (initial_ == current) {
-            firstBackoffTime_ = now;
-        } else {
-            timeElapsedSinceFirstBackoff = now - firstBackoffTime_;
-        }
-        if (timeElapsedSinceFirstBackoff + current > mandatoryStop_) {
-            current = std::max(initial_, mandatoryStop_ - timeElapsedSinceFirstBackoff);
-            mandatoryStopMade_ = true;
-        }
-    }
-    // Add Randomness
-    current = current - (current * (rand_r(&randomSeed_) % 10) / 100);
-    return std::max(initial_, current);
+    return current;
 }
 
 void Backoff::reset() {
     next_ = initial_;
-    mandatoryStopMade_ = false;
 }
 
-}  // namespace pulsar
+}  //pulsar - namespace end

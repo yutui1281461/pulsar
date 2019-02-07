@@ -23,12 +23,13 @@ import java.io.OutputStream;
 import java.util.Enumeration;
 
 import org.apache.pulsar.broker.PulsarService;
-import static org.apache.pulsar.common.stats.JvmMetrics.getJvmDirectMemoryUsed;
-import org.apache.pulsar.common.util.SimpleTextOutputStream;
+import org.apache.pulsar.broker.stats.metrics.JvmMetrics;
+import org.apache.pulsar.utils.SimpleTextOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
-import io.netty.util.internal.PlatformDependent;
 import io.prometheus.client.Collector;
 import io.prometheus.client.Collector.MetricFamilySamples;
 import io.prometheus.client.Collector.MetricFamilySamples.Sample;
@@ -36,12 +37,10 @@ import io.prometheus.client.CollectorRegistry;
 import io.prometheus.client.Gauge;
 import io.prometheus.client.Gauge.Child;
 import io.prometheus.client.hotspot.DefaultExports;
-import org.apache.pulsar.functions.worker.FunctionsStatsGenerator;
 
 /**
- * Generate metrics aggregated at the namespace level and optionally at a topic level and formats them out
- * in a text format suitable to be consumed by Prometheus.
- * Format specification can be found at {@link https://prometheus.io/docs/instrumenting/exposition_formats/}
+ * Generate metrics aggregated at the namespace level and formats them out in a text format suitable to be consumed by
+ * Prometheus. Format specification can be found at {@link https://prometheus.io/docs/instrumenting/exposition_formats/}
  */
 public class PrometheusMetricsGenerator {
 
@@ -51,29 +50,27 @@ public class PrometheusMetricsGenerator {
         Gauge.build("jvm_memory_direct_bytes_used", "-").create().setChild(new Child() {
             @Override
             public double get() {
-                return getJvmDirectMemoryUsed();
+                return JvmMetrics.getJvmDirectMemoryUsed();
             }
         }).register(CollectorRegistry.defaultRegistry);
 
         Gauge.build("jvm_memory_direct_bytes_max", "-").create().setChild(new Child() {
+            @SuppressWarnings("restriction")
             @Override
             public double get() {
-                return PlatformDependent.maxDirectMemory();
+                return sun.misc.VM.maxDirectMemory();
             }
         }).register(CollectorRegistry.defaultRegistry);
     }
 
-    public static void generate(PulsarService pulsar, boolean includeTopicMetrics, boolean includeConsumerMetrics, OutputStream out) throws IOException {
+    public static void generate(PulsarService pulsar, OutputStream out) throws IOException {
         ByteBuf buf = ByteBufAllocator.DEFAULT.heapBuffer();
         try {
             SimpleTextOutputStream stream = new SimpleTextOutputStream(buf);
 
             generateSystemMetrics(stream, pulsar.getConfiguration().getClusterName());
 
-            NamespaceStatsAggregator.generate(pulsar, includeTopicMetrics, includeConsumerMetrics, stream);
-
-            FunctionsStatsGenerator.generate(pulsar.getWorkerService(),
-                    pulsar.getConfiguration().getClusterName(), stream);
+            NamespaceStatsAggregator.generate(pulsar, stream);
 
             out.write(buf.array(), buf.arrayOffset(), buf.readableBytes());
         } finally {
@@ -86,20 +83,15 @@ public class PrometheusMetricsGenerator {
         while (metricFamilySamples.hasMoreElements()) {
             MetricFamilySamples metricFamily = metricFamilySamples.nextElement();
 
-            // Write type of metric
-            stream.write("# TYPE ").write(metricFamily.name).write(' ')
-                    .write(getTypeStr(metricFamily.type)).write('\n');
-
             for (int i = 0; i < metricFamily.samples.size(); i++) {
                 Sample sample = metricFamily.samples.get(i);
                 stream.write(sample.name);
-                stream.write("{cluster=\"").write(cluster).write('"');
+                stream.write("{cluster=\"").write(cluster).write("\",");
                 for (int j = 0; j < sample.labelNames.size(); j++) {
-                    stream.write(",");
                     stream.write(sample.labelNames.get(j));
                     stream.write("=\"");
                     stream.write(sample.labelValues.get(j));
-                    stream.write('"');
+                    stream.write("\",");
                 }
 
                 stream.write("} ");
@@ -108,21 +100,4 @@ public class PrometheusMetricsGenerator {
             }
         }
     }
-
-    static String getTypeStr(Collector.Type type) {
-        switch (type) {
-        case COUNTER:
-            return "counter";
-        case GAUGE:
-            return "gauge";
-        case SUMMARY        :
-            return "summary";
-        case HISTOGRAM:
-            return "histogram";
-        case UNTYPED:
-        default:
-            return "untyped";
-        }
-    }
-
 }

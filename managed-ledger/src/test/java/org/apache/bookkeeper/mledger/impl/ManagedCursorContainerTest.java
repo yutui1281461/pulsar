@@ -18,15 +18,14 @@
  */
 package org.apache.bookkeeper.mledger.impl;
 
-import static org.testng.Assert.*;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.fail;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
+
 import org.apache.bookkeeper.mledger.AsyncCallbacks;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.ClearBacklogCallback;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.DeleteCallback;
@@ -39,6 +38,10 @@ import org.apache.bookkeeper.mledger.ManagedCursor;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
 import org.apache.bookkeeper.mledger.Position;
 import org.testng.annotations.Test;
+
+import com.google.common.base.Predicate;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 
 @Test
 public class ManagedCursorContainerTest {
@@ -53,11 +56,6 @@ public class ManagedCursorContainerTest {
             this.container = container;
             this.name = name;
             this.position = position;
-        }
-
-        @Override
-        public Map<String, Long> getProperties() {
-            return Collections.emptyMap();
         }
 
         @Override
@@ -92,23 +90,12 @@ public class ManagedCursorContainerTest {
 
         @Override
         public void markDelete(Position position) throws ManagedLedgerException {
-            markDelete(position, Collections.emptyMap());
-        }
-
-        @Override
-        public void markDelete(Position position, Map<String, Long> properties) throws ManagedLedgerException {
             this.position = position;
             container.cursorUpdated(this, (PositionImpl) position);
         }
 
         @Override
         public void asyncMarkDelete(Position position, MarkDeleteCallback callback, Object ctx) {
-            fail();
-        }
-
-        @Override
-        public void asyncMarkDelete(Position position, Map<String, Long> properties, MarkDeleteCallback callback,
-                Object ctx) {
             fail();
         }
 
@@ -120,16 +107,6 @@ public class ManagedCursorContainerTest {
         @Override
         public String getName() {
             return name;
-        }
-
-        @Override
-        public long getLastActive() {
-            return System.currentTimeMillis();
-        }
-
-        @Override
-        public void updateLastActive() {
-            // no-op
         }
 
         public String toString() {
@@ -166,14 +143,6 @@ public class ManagedCursorContainerTest {
         }
 
         @Override
-        public void delete(Iterable<Position> positions) throws InterruptedException, ManagedLedgerException {
-        }
-
-        @Override
-        public void asyncDelete(Iterable<Position> position, DeleteCallback callback, Object ctx) {
-        }
-
-        @Override
         public void clearBacklog() throws InterruptedException, ManagedLedgerException {
         }
 
@@ -194,11 +163,6 @@ public class ManagedCursorContainerTest {
         @Override
         public Position findNewestMatching(Predicate<Entry> condition)
                 throws InterruptedException, ManagedLedgerException {
-            return null;
-        }
-
-        @Override
-        public Position findNewestMatching(FindPositionConstraint constraint, Predicate<Entry> condition) throws InterruptedException, ManagedLedgerException {
             return null;
         }
 
@@ -270,30 +234,6 @@ public class ManagedCursorContainerTest {
         @Override
         public boolean isActive() {
             return true;
-        }
-
-        @Override
-        public long getNumberOfEntriesSinceFirstNotAckedMessage() {
-            return 0;
-        }
-
-        @Override
-        public int getTotalNonContiguousDeletedMessagesRange() {
-            return 0;
-        }
-
-        @Override
-        public long getEstimatedSizeSinceMarkDeletePosition() {
-            return 0L;
-        }
-
-        @Override
-        public void setThrottleMarkDelete(double throttleMarkDelete) {
-        }
-
-        @Override
-        public double getThrottleMarkDelete() {
-            return -1;
         }
     }
 

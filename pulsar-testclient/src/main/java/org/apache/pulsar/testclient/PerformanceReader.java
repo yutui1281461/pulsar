@@ -18,7 +18,6 @@
  */
 package org.apache.pulsar.testclient;
 
-import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
 
 import java.io.FileInputStream;
@@ -29,15 +28,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
 
-import org.apache.pulsar.client.api.ClientBuilder;
+import org.apache.pulsar.client.api.ClientConfiguration;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.Reader;
-import org.apache.pulsar.client.api.ReaderBuilder;
+import org.apache.pulsar.client.api.ReaderConfiguration;
 import org.apache.pulsar.client.api.ReaderListener;
 import org.apache.pulsar.client.impl.MessageIdImpl;
-import org.apache.pulsar.common.naming.TopicName;
-import org.apache.pulsar.common.util.FutureUtil;
+import org.apache.pulsar.client.impl.PulsarClientImpl;
+import org.apache.pulsar.client.util.FutureUtil;
+import org.apache.pulsar.common.naming.DestinationName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,11 +62,11 @@ public class PerformanceReader {
         @Parameter(names = { "--conf-file" }, description = "Configuration file")
         public String confFile;
 
-        @Parameter(description = "persistent://prop/ns/my-topic", required = true)
+        @Parameter(description = "persistent://prop/cluster/ns/my-topic", required = true)
         public List<String> topic;
 
         @Parameter(names = { "-t", "--num-topics" }, description = "Number of topics")
-        public int numTopics = 1;
+        public int numDestinations = 1;
 
         @Parameter(names = { "-r", "--rate" }, description = "Simulate a slow message reader (rate in msg/s)")
         public double rate = 0;
@@ -95,14 +95,6 @@ public class PerformanceReader {
         @Parameter(names = {
                 "--auth-params" }, description = "Authentication parameters, e.g., \"key1:val1,key2:val2\"")
         public String authParams;
-
-        @Parameter(names = {
-                "--use-tls" }, description = "Use TLS encryption on the connection")
-        public boolean useTls;
-
-        @Parameter(names = {
-                "--trust-cert-file" }, description = "Path for the trusted TLS certificate file")
-        public String tlsTrustCertsFilePath = "";
     }
 
     public static void main(String[] args) throws Exception {
@@ -153,14 +145,6 @@ public class PerformanceReader {
             if (arguments.authParams == null) {
                 arguments.authParams = prop.getProperty("authParams", null);
             }
-
-            if (arguments.useTls == false) {
-                arguments.useTls = Boolean.parseBoolean(prop.getProperty("useTls"));
-            }
-
-            if (isBlank(arguments.tlsTrustCertsFilePath)) {
-                arguments.tlsTrustCertsFilePath = prop.getProperty("tlsTrustCertsFilePath", "");
-            }
         }
 
         // Dump config variables
@@ -168,11 +152,11 @@ public class PerformanceReader {
         ObjectWriter w = m.writerWithDefaultPrettyPrinter();
         log.info("Starting Pulsar performance reader with config: {}", w.writeValueAsString(arguments));
 
-        final TopicName prefixTopicName = TopicName.get(arguments.topic.get(0));
+        final DestinationName prefixTopicName = DestinationName.get(arguments.topic.get(0));
 
         final RateLimiter limiter = arguments.rate > 0 ? RateLimiter.create(arguments.rate) : null;
 
-        ReaderListener<byte[]> listener = (reader, msg) -> {
+        ReaderListener listener = (reader, msg) -> {
             messagesReceived.increment();
             bytesReceived.add(msg.getData().length);
 
@@ -181,21 +165,19 @@ public class PerformanceReader {
             }
         };
 
-        ClientBuilder clientBuilder = PulsarClient.builder() //
-                .serviceUrl(arguments.serviceURL) //
-                .connectionsPerBroker(arguments.maxConnections) //
-                .statsInterval(arguments.statsIntervalSeconds, TimeUnit.SECONDS) //
-                .ioThreads(Runtime.getRuntime().availableProcessors()) //
-                .enableTls(arguments.useTls) //
-                .tlsTrustCertsFilePath(arguments.tlsTrustCertsFilePath);
-
+        ClientConfiguration clientConf = new ClientConfiguration();
+        clientConf.setConnectionsPerBroker(arguments.maxConnections);
+        clientConf.setStatsInterval(arguments.statsIntervalSeconds, TimeUnit.SECONDS);
+        clientConf.setIoThreads(Runtime.getRuntime().availableProcessors());
         if (isNotBlank(arguments.authPluginClassName)) {
-            clientBuilder.authentication(arguments.authPluginClassName, arguments.authParams);
+            clientConf.setAuthentication(arguments.authPluginClassName, arguments.authParams);
         }
+        PulsarClient pulsarClient = new PulsarClientImpl(arguments.serviceURL, clientConf);
 
-        PulsarClient pulsarClient = clientBuilder.build();
-
-        List<CompletableFuture<Reader<byte[]>>> futures = Lists.newArrayList();
+        List<CompletableFuture<Reader>> futures = Lists.newArrayList();
+        ReaderConfiguration readerConfig = new ReaderConfiguration();
+        readerConfig.setReaderListener(listener);
+        readerConfig.setReceiverQueueSize(arguments.receiverQueueSize);
 
         MessageId startMessageId;
         if ("earliest".equals(arguments.startMessageId)) {
@@ -207,21 +189,16 @@ public class PerformanceReader {
             startMessageId = new MessageIdImpl(Long.parseLong(parts[0]), Long.parseLong(parts[1]), -1);
         }
 
-        ReaderBuilder<byte[]> readerBuilder = pulsarClient.newReader() //
-                .readerListener(listener) //
-                .receiverQueueSize(arguments.receiverQueueSize) //
-                .startMessageId(startMessageId);
+        for (int i = 0; i < arguments.numDestinations; i++) {
+            final DestinationName destinationName = (arguments.numDestinations == 1) ? prefixTopicName
+                    : DestinationName.get(String.format("%s-%d", prefixTopicName, i));
 
-        for (int i = 0; i < arguments.numTopics; i++) {
-            final TopicName topicName = (arguments.numTopics == 1) ? prefixTopicName
-                    : TopicName.get(String.format("%s-%d", prefixTopicName, i));
-
-            futures.add(readerBuilder.clone().topic(topicName.toString()).createAsync());
+            futures.add(pulsarClient.createReaderAsync(destinationName.toString(), startMessageId, readerConfig));
         }
 
         FutureUtil.waitForAll(futures).get();
 
-        log.info("Start reading from {} topics", arguments.numTopics);
+        log.info("Start reading from {} topics", arguments.numDestinations);
 
         long oldTime = System.nanoTime();
 

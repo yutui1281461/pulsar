@@ -18,30 +18,27 @@
  */
 package org.apache.pulsar.storm;
 
-import static java.lang.String.format;
-
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-import org.apache.pulsar.client.api.ClientBuilder;
-import org.apache.pulsar.client.api.Producer;
-import org.apache.pulsar.client.api.PulsarClientException;
-import org.apache.pulsar.client.api.TypedMessageBuilder;
-import org.apache.pulsar.client.impl.ClientBuilderImpl;
-import org.apache.pulsar.client.impl.TypedMessageBuilderImpl;
-import org.apache.pulsar.client.impl.conf.ClientConfigurationData;
-import org.apache.pulsar.client.impl.conf.ProducerConfigurationData;
-import org.apache.storm.metric.api.IMetric;
-import org.apache.storm.task.OutputCollector;
-import org.apache.storm.task.TopologyContext;
-import org.apache.storm.topology.OutputFieldsDeclarer;
-import org.apache.storm.topology.base.BaseRichBolt;
-import org.apache.storm.tuple.Tuple;
-import org.apache.storm.utils.TupleUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import org.apache.pulsar.client.api.ClientConfiguration;
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.Producer;
+import org.apache.pulsar.client.api.ProducerConfiguration;
+import org.apache.pulsar.client.api.PulsarClientException;
+
+import backtype.storm.Constants;
+import backtype.storm.metric.api.IMetric;
+import backtype.storm.task.OutputCollector;
+import backtype.storm.task.TopologyContext;
+import backtype.storm.topology.OutputFieldsDeclarer;
+import backtype.storm.topology.base.BaseRichBolt;
+import backtype.storm.tuple.Tuple;
 
 public class PulsarBolt extends BaseRichBolt implements IMetric {
     /**
@@ -54,28 +51,30 @@ public class PulsarBolt extends BaseRichBolt implements IMetric {
     public static final String PRODUCER_RATE = "producerRate";
     public static final String PRODUCER_THROUGHPUT_BYTES = "producerThroughput";
 
-    private final ClientConfigurationData clientConf;
-    private final ProducerConfigurationData producerConf;
+    private final ClientConfiguration clientConf;
+    private final ProducerConfiguration producerConf;
     private final PulsarBoltConfiguration pulsarBoltConf;
-    private final ConcurrentMap<String, Object> metricsMap = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Object> metricsMap = Maps.newConcurrentMap();
 
     private SharedPulsarClient sharedPulsarClient;
     private String componentId;
     private String boltId;
     private OutputCollector collector;
-    private Producer<byte[]> producer;
+    private Producer producer;
     private volatile long messagesSent = 0;
     private volatile long messageSizeSent = 0;
 
-    public PulsarBolt(PulsarBoltConfiguration pulsarBoltConf, ClientBuilder clientBuilder) {
-        this.clientConf = ((ClientBuilderImpl) clientBuilder).getClientConfigurationData().clone();
-        this.producerConf = new ProducerConfigurationData();
-        Objects.requireNonNull(pulsarBoltConf.getServiceUrl());
-        Objects.requireNonNull(pulsarBoltConf.getTopic());
-        Objects.requireNonNull(pulsarBoltConf.getTupleToMessageMapper());
+    public PulsarBolt(PulsarBoltConfiguration pulsarBoltConf, ClientConfiguration clientConf) {
+        this(pulsarBoltConf, clientConf, new ProducerConfiguration());
+    }
 
-        this.clientConf.setServiceUrl(pulsarBoltConf.getServiceUrl());
-        this.producerConf.setTopicName(pulsarBoltConf.getTopic());
+    public PulsarBolt(PulsarBoltConfiguration pulsarBoltConf, ClientConfiguration clientConf,
+            ProducerConfiguration producerConf) {
+        this.clientConf = clientConf;
+        this.producerConf = producerConf;
+        Preconditions.checkNotNull(pulsarBoltConf.getServiceUrl());
+        Preconditions.checkNotNull(pulsarBoltConf.getTopic());
+        Preconditions.checkNotNull(pulsarBoltConf.getTupleToMessageMapper());
         this.pulsarBoltConf = pulsarBoltConf;
     }
 
@@ -86,13 +85,11 @@ public class PulsarBolt extends BaseRichBolt implements IMetric {
         this.boltId = String.format("%s-%s", componentId, context.getThisTaskId());
         this.collector = collector;
         try {
-            sharedPulsarClient = SharedPulsarClient.get(componentId, clientConf);
-            producer = sharedPulsarClient.getSharedProducer(producerConf);
+            sharedPulsarClient = SharedPulsarClient.get(componentId, pulsarBoltConf.getServiceUrl(), clientConf);
+            producer = sharedPulsarClient.getSharedProducer(pulsarBoltConf.getTopic(), producerConf);
             LOG.info("[{}] Created a pulsar producer on topic {} to send messages", boltId, pulsarBoltConf.getTopic());
         } catch (PulsarClientException e) {
             LOG.error("[{}] Error initializing pulsar producer on topic {}", boltId, pulsarBoltConf.getTopic(), e);
-            throw new IllegalStateException(
-                    format("Failed to initialize producer for %s : %s", pulsarBoltConf.getTopic(), e.getMessage()), e);
         }
         context.registerMetric(String.format("PulsarBoltMetrics-%s-%s", componentId, context.getThisTaskIndex()), this,
                 pulsarBoltConf.getMetricsTimeIntervalInSecs());
@@ -100,24 +97,23 @@ public class PulsarBolt extends BaseRichBolt implements IMetric {
 
     @Override
     public void execute(Tuple input) {
-        if (TupleUtils.isTick(input)) {
+        // do not send tick tuples since they are used to execute periodic tasks
+        if (isTickTuple(input)) {
             collector.ack(input);
             return;
         }
         try {
             if (producer != null) {
                 // a message key can be provided in the mapper
-                TypedMessageBuilder<byte[]> msgBuilder = pulsarBoltConf.getTupleToMessageMapper()
-                        .toMessage(producer.newMessage(), input);
-                if (msgBuilder == null) {
+                Message msg = pulsarBoltConf.getTupleToMessageMapper().toMessage(input);
+                if (msg == null) {
                     if (LOG.isDebugEnabled()) {
                         LOG.debug("[{}] Cannot send null message, acking the collector", boltId);
                     }
                     collector.ack(input);
                 } else {
-                    final long messageSizeToBeSent = ((TypedMessageBuilderImpl<byte[]>) msgBuilder).getContent()
-                            .remaining();
-                    msgBuilder.sendAsync().handle((msgId, ex) -> {
+                    final long messageSizeToBeSent = msg.getData().length;
+                    producer.sendAsync(msg).handle((r, ex) -> {
                         synchronized (collector) {
                             if (ex != null) {
                                 collector.reportError(ex);
@@ -129,7 +125,7 @@ public class PulsarBolt extends BaseRichBolt implements IMetric {
                                 ++messagesSent;
                                 messageSizeSent += messageSizeToBeSent;
                                 if (LOG.isDebugEnabled()) {
-                                    LOG.debug("[{}] Message sent with id {}", boltId, msgId);
+                                    LOG.debug("[{}] Message sent with id {}", boltId, msg.getMessageId());
                                 }
                             }
                         }
@@ -164,6 +160,11 @@ public class PulsarBolt extends BaseRichBolt implements IMetric {
     @Override
     public void declareOutputFields(OutputFieldsDeclarer declarer) {
         pulsarBoltConf.getTupleToMessageMapper().declareOutputFields(declarer);
+    }
+
+    protected static boolean isTickTuple(Tuple tuple) {
+        return tuple != null && Constants.SYSTEM_COMPONENT_ID.equals(tuple.getSourceComponent())
+                && Constants.SYSTEM_TICK_STREAM_ID.equals(tuple.getSourceStreamId());
     }
 
     /**

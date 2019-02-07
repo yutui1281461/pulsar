@@ -18,31 +18,31 @@
  */
 #include "ProducerImpl.h"
 #include "ClientImpl.h"
+#include "DestinationName.h"
 #include <vector>
-
-#include <mutex>
+#include <boost/shared_ptr.hpp>
+#include <boost/thread/mutex.hpp>
 #include <pulsar/MessageRoutingPolicy.h>
-#include <pulsar/TopicMetadata.h>
-#include <lib/TopicName.h>
 
 namespace pulsar {
 
-class PartitionedProducerImpl : public ProducerImplBase,
-                                public std::enable_shared_from_this<PartitionedProducerImpl> {
-   public:
-    enum PartitionedProducerState
-    {
-        Pending,
-        Ready,
-        Closing,
-        Closed,
-        Failed
+  class PartitionedProducerImpl: public ProducerImplBase, public boost::enable_shared_from_this<PartitionedProducerImpl> {
+
+ public:
+    enum PartitionedProducerState {
+      Pending,
+      Ready,
+      Closing,
+      Closed,
+      Failed
     };
     const static std::string PARTITION_NAME_SUFFIX;
 
-    typedef std::unique_lock<std::mutex> Lock;
+    typedef boost::unique_lock<boost::mutex> Lock;
 
-    PartitionedProducerImpl(ClientImplPtr ptr, const TopicNamePtr topicName, const unsigned int numPartitions,
+    PartitionedProducerImpl(ClientImplPtr ptr,
+                            const DestinationNamePtr destinationName,
+                            const unsigned int numPartitions,
                             const ProducerConfiguration& config);
     virtual ~PartitionedProducerImpl();
 
@@ -54,12 +54,6 @@ class PartitionedProducerImpl : public ProducerImplBase,
      */
     virtual void closeAsync(CloseCallback closeCallback);
 
-    virtual const std::string& getProducerName() const;
-
-    virtual int64_t getLastSequenceId() const;
-
-    virtual const std::string& getSchemaVersion() const;
-
     virtual void start();
 
     virtual void shutdown();
@@ -70,14 +64,12 @@ class PartitionedProducerImpl : public ProducerImplBase,
 
     virtual Future<Result, ProducerImplBaseWeakPtr> getProducerCreatedFuture();
 
-    virtual void triggerFlush();
-
-    virtual void flushAsync(FlushCallback callback);
-
-    void handleSinglePartitionProducerCreated(Result result, ProducerImplBaseWeakPtr producerBaseWeakPtr,
+    void handleSinglePartitionProducerCreated(Result result,
+                                              ProducerImplBaseWeakPtr producerBaseWeakPtr,
                                               const unsigned int partitionIndex);
 
-    void handleSinglePartitionProducerClose(Result result, const unsigned int partitionIndex,
+    void handleSinglePartitionProducerClose(Result result,
+                                            const unsigned int partitionIndex,
                                             CloseCallback callback);
 
     void notifyResult(CloseCallback closeCallback);
@@ -86,13 +78,13 @@ class PartitionedProducerImpl : public ProducerImplBase,
 
     friend class PulsarFriend;
 
-   private:
+ private:
     const ClientImplPtr client_;
 
-    const TopicNamePtr topicName_;
+    const DestinationNamePtr destinationName_;
     const std::string topic_;
 
-    std::unique_ptr<TopicMetadata> topicMetadata_;
+    const unsigned int numPartitions_;
 
     unsigned int numProducersCreated_;
 
@@ -101,7 +93,7 @@ class PartitionedProducerImpl : public ProducerImplBase,
      */
     bool cleanup_;
 
-    ProducerConfiguration conf_;
+    const ProducerConfiguration conf_;
 
     typedef std::vector<ProducerImplPtr> ProducerList;
 
@@ -110,17 +102,12 @@ class PartitionedProducerImpl : public ProducerImplBase,
     MessageRoutingPolicyPtr routerPolicy_;
 
     // mutex_ is used to share state_, and numProducersCreated_
-    std::mutex mutex_;
+    boost::mutex mutex_;
 
     PartitionedProducerState state_;
 
     // only set this promise to value, when producers on all partitions are created.
     Promise<Result, ProducerImplBaseWeakPtr> partitionedProducerCreatedPromise_;
+  };
 
-    MessageRoutingPolicyPtr getMessageRouter();
-
-    std::atomic<int> flushedPartitions_;
-    std::shared_ptr<Promise<Result, bool_type>> flushPromise_;
-};
-
-}  // namespace pulsar
+} //ends namespace Pulsar

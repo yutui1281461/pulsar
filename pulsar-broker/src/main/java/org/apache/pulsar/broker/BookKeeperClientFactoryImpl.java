@@ -20,23 +20,23 @@ package org.apache.pulsar.broker;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.bookkeeper.client.BKException;
 import org.apache.bookkeeper.client.BookKeeper;
 import org.apache.bookkeeper.client.RackawareEnsemblePlacementPolicy;
-import org.apache.bookkeeper.client.RegionAwareEnsemblePlacementPolicy;
 import org.apache.bookkeeper.conf.ClientConfiguration;
+import org.apache.bookkeeper.meta.HierarchicalLedgerManagerFactory;
+import org.apache.pulsar.broker.ServiceConfiguration;
 import org.apache.pulsar.zookeeper.ZkBookieRackAffinityMapping;
 import org.apache.pulsar.zookeeper.ZkIsolatedBookieEnsemblePlacementPolicy;
 import org.apache.pulsar.zookeeper.ZooKeeperCache;
+import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooKeeper;
 
 public class BookKeeperClientFactoryImpl implements BookKeeperClientFactory {
 
-    private final AtomicReference<ZooKeeperCache> rackawarePolicyZkCache = new AtomicReference<>();
-    private final AtomicReference<ZooKeeperCache> clientIsolationZkCache = new AtomicReference<>();
-
+    private ZooKeeperCache rackawarePolicyZkCache;
+    private ZooKeeperCache clientIsolationZkCache;
+    
     @Override
     public BookKeeper create(ServiceConfiguration conf, ZooKeeper zkClient) throws IOException {
         ClientConfiguration bkConf = new ClientConfiguration();
@@ -53,8 +53,8 @@ public class BookKeeperClientFactoryImpl implements BookKeeperClientFactory {
         bkConf.setReadEntryTimeout((int) conf.getBookkeeperClientTimeoutInSeconds());
         bkConf.setSpeculativeReadTimeout(conf.getBookkeeperClientSpeculativeReadTimeoutInMillis());
         bkConf.setNumChannelsPerBookie(16);
-        bkConf.setUseV2WireProtocol(conf.isBookkeeperUseV2WireProtocol());
-        bkConf.setEnableDigestTypeAutodetection(true);
+        bkConf.setUseV2WireProtocol(true);
+        bkConf.setLedgerManagerFactoryClassName(HierarchicalLedgerManagerFactory.class.getName());
         if (conf.isBookkeeperClientHealthCheckEnabled()) {
             bkConf.enableBookieHealthCheck();
             bkConf.setBookieHealthCheckInterval(conf.getBookkeeperHealthCheckIntervalSec(), TimeUnit.SECONDS);
@@ -63,53 +63,39 @@ public class BookKeeperClientFactoryImpl implements BookKeeperClientFactory {
                     TimeUnit.SECONDS);
         }
 
-        if (conf.isBookkeeperClientRackawarePolicyEnabled() || conf.isBookkeeperClientRegionawarePolicyEnabled()) {
-            if (conf.isBookkeeperClientRegionawarePolicyEnabled()) {
-                bkConf.setEnsemblePlacementPolicy(RegionAwareEnsemblePlacementPolicy.class);
-            } else {
-                bkConf.setEnsemblePlacementPolicy(RackawareEnsemblePlacementPolicy.class);
-            }
+        if (conf.isBookkeeperClientRackawarePolicyEnabled()) {
+            bkConf.setEnsemblePlacementPolicy(RackawareEnsemblePlacementPolicy.class);
             bkConf.setProperty(RackawareEnsemblePlacementPolicy.REPP_DNS_RESOLVER_CLASS,
                     ZkBookieRackAffinityMapping.class.getName());
-
-            ZooKeeperCache zkc = new ZooKeeperCache(zkClient) {
+            this.rackawarePolicyZkCache = new ZooKeeperCache(zkClient) {
             };
-            if (!rackawarePolicyZkCache.compareAndSet(null, zkc)) {
-                zkc.stop();
-            }
-
-            bkConf.setProperty(ZooKeeperCache.ZK_CACHE_INSTANCE, this.rackawarePolicyZkCache.get());
+            bkConf.setProperty(ZooKeeperCache.ZK_CACHE_INSTANCE, this.rackawarePolicyZkCache);
         }
-        bkConf.setReorderReadSequenceEnabled(conf.isBookkeeperClientReorderReadSequenceEnabled());
 
         if (conf.getBookkeeperClientIsolationGroups() != null && !conf.getBookkeeperClientIsolationGroups().isEmpty()) {
             bkConf.setEnsemblePlacementPolicy(ZkIsolatedBookieEnsemblePlacementPolicy.class);
             bkConf.setProperty(ZkIsolatedBookieEnsemblePlacementPolicy.ISOLATION_BOOKIE_GROUPS,
                     conf.getBookkeeperClientIsolationGroups());
             if (bkConf.getProperty(ZooKeeperCache.ZK_CACHE_INSTANCE) == null) {
-                ZooKeeperCache zkc = new ZooKeeperCache(zkClient) {
+                this.clientIsolationZkCache = new ZooKeeperCache(zkClient) {
                 };
-
-                if (!clientIsolationZkCache.compareAndSet(null, zkc)) {
-                    zkc.stop();
-                }
                 bkConf.setProperty(ZooKeeperCache.ZK_CACHE_INSTANCE, this.clientIsolationZkCache);
             }
         }
 
         try {
             return new BookKeeper(bkConf, zkClient);
-        } catch (InterruptedException | BKException e) {
+        } catch (InterruptedException | KeeperException e) {
             throw new IOException(e);
         }
     }
-
+    
     public void close() {
-        if (this.rackawarePolicyZkCache.get() != null) {
-            this.rackawarePolicyZkCache.get().stop();
+        if (this.rackawarePolicyZkCache != null) {
+            this.rackawarePolicyZkCache.stop();
         }
-        if (this.clientIsolationZkCache.get() != null) {
-            this.clientIsolationZkCache.get().stop();
+        if (this.clientIsolationZkCache != null) {
+            this.clientIsolationZkCache.stop();
         }
     }
 }

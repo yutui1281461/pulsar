@@ -19,86 +19,89 @@
 #ifndef LIB_BATCHACKNOWLEDGEMENTTRACKER_H_
 #define LIB_BATCHACKNOWLEDGEMENTTRACKER_H_
 
+#include "pulsar/BatchMessageId.h"
 #include "MessageImpl.h"
 #include <map>
-#include <mutex>
+#include <boost/thread/mutex.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <lib/PulsarApi.pb.h>
 #include <algorithm>
 #include "LogUtils.h"
 #include <string>
 #include <sstream>
-namespace pulsar {
+namespace pulsar{
 
 class ConsumerImpl;
 
 class BatchAcknowledgementTracker {
-   private:
-    typedef std::unique_lock<std::mutex> Lock;
-    typedef std::pair<MessageId, boost::dynamic_bitset<> > TrackerPair;
-    typedef std::map<MessageId, boost::dynamic_bitset<> > TrackerMap;
-    std::mutex mutex_;
+ private:
+    typedef boost::unique_lock<boost::mutex> Lock;
+    typedef std::pair<BatchMessageId, boost::dynamic_bitset<> > TrackerPair;
+    typedef std::map<BatchMessageId, boost::dynamic_bitset<> > TrackerMap;
+    boost::mutex mutex_;
 
     TrackerMap trackerMap_;
 
-    // SendList is used to reduce the time required to go over the dynamic_bitset and check if the entire
-    // batch is acked.
-    // It is useful in cases where the entire batch is acked but cnx is broken. In this case when any of the
-    // batch index
-    // is acked again, we just check the sendList to verify that the batch is acked w/o iterating over the
-    // dynamic_bitset.
-    std::vector<MessageId> sendList_;
+    // SendList is used to reduce the time required to go over the dynamic_bitset and check if the entire batch is acked.
+    // It is useful in cases where the entire batch is acked but cnx is broken. In this case when any of the batch index
+    // is acked again, we just check the sendList to verify that the batch is acked w/o iterating over the dynamic_bitset.
+    std::vector<BatchMessageId> sendList_;
 
     // we don't need to track MessageId < greatestCumulativeAckReceived
-    MessageId greatestCumulativeAckSent_;
+    BatchMessageId greatestCumulativeAckSent_;
     std::string name_;
 
-   public:
-    BatchAcknowledgementTracker(const std::string topic, const std::string subscription,
-                                const long consumerId);
+ public:
+    BatchAcknowledgementTracker(const std::string topic, const std::string subscription, const long consumerId);
 
-    bool isBatchReady(const MessageId& msgID, const proto::CommandAck_AckType ackType);
-    const MessageId getGreatestCumulativeAckReady(const MessageId& messageId);
+    bool isBatchReady(const BatchMessageId& msgID, const proto::CommandAck_AckType ackType);
+    const BatchMessageId getGreatestCumulativeAckReady(const BatchMessageId& messageId);
 
-    void deleteAckedMessage(const MessageId& messageId, proto::CommandAck_AckType ackType);
+    void deleteAckedMessage(const BatchMessageId& messageId, proto::CommandAck_AckType ackType);
     void receivedMessage(const Message& message);
 
-    void clear();
 
-    inline friend std::ostream& operator<<(std::ostream& os,
-                                           const BatchAcknowledgementTracker& batchAcknowledgementTracker);
+    inline friend std::ostream& operator<<(std::ostream& os, const BatchAcknowledgementTracker& batchAcknowledgementTracker);
 
     // Used for Cumulative acks only
     struct SendRemoveCriteria {
-       private:
-        const MessageId& messageId_;
+        private:
+        const BatchMessageId& messageId_;
 
-       public:
-        SendRemoveCriteria(const MessageId& messageId) : messageId_(messageId) {}
+        public:
+        SendRemoveCriteria(const BatchMessageId& messageId)
+            : messageId_(messageId) {}
 
-        bool operator()(const MessageId& element) const { return (element <= messageId_); }
+        bool operator()(const BatchMessageId &element) const {
+            return (element <= messageId_);
+        }
     };
 
     // Used for Cumulative acks only
     struct TrackerMapRemoveCriteria {
-       private:
-        const MessageId& messageId_;
+        private:
+        const BatchMessageId& messageId_;
 
-       public:
-        TrackerMapRemoveCriteria(const MessageId& messageId) : messageId_(messageId) {}
+        public:
+        TrackerMapRemoveCriteria(const BatchMessageId& messageId)
+            : messageId_(messageId) {}
 
-        bool operator()(std::pair<const MessageId, boost::dynamic_bitset<> >& element) const {
+        bool operator()(std::pair<const pulsar::BatchMessageId, boost::dynamic_bitset<> > &element) const {
             return (element.first <= messageId_);
         }
     };
+
 };
 
-std::ostream& operator<<(std::ostream& os, const BatchAcknowledgementTracker& batchAcknowledgementTracker) {
-    os << "{ " << batchAcknowledgementTracker.name_ << " [greatestCumulativeAckReceived_-"
-       << batchAcknowledgementTracker.greatestCumulativeAckSent_
-       << "] [trackerMap size = " << batchAcknowledgementTracker.trackerMap_.size() << " ]}";
+std::ostream& operator<<(std::ostream& os,
+                         const BatchAcknowledgementTracker& batchAcknowledgementTracker) {
+    os << "{ " <<  batchAcknowledgementTracker.name_
+            << " [greatestCumulativeAckReceived_-"
+            << batchAcknowledgementTracker.greatestCumulativeAckSent_ << "] [trackerMap size = "
+            << batchAcknowledgementTracker.trackerMap_.size() << " ]}";
     return os;
 }
-}  // namespace pulsar
+
+}
 
 #endif /* LIB_BATCHACKNOWLEDGEMENTTRACKER_H_ */

@@ -20,75 +20,49 @@ package org.apache.pulsar.common.policies.data;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 
-import com.google.common.collect.Sets;
-import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 public class Policies {
 
-    public final AuthPolicies auth_policies = new AuthPolicies();
-    public Set<String> replication_clusters = Sets.newHashSet();
+    public final AuthPolicies auth_policies;
+    public List<String> replication_clusters;
     public BundlesData bundles;
-    public Map<BacklogQuota.BacklogQuotaType, BacklogQuota> backlog_quota_map = Maps.newHashMap();
-    public Map<String, DispatchRate> clusterDispatchRate = Maps.newHashMap();
-    public Map<String, DispatchRate> subscriptionDispatchRate = Maps.newHashMap();
-    public Map<String, SubscribeRate> clusterSubscribeRate = Maps.newHashMap();
-    public PersistencePolicies persistence = null;
-
-    // If set, it will override the broker settings for enabling deduplication
-    public Boolean deduplicationEnabled = null;
-
-    public Map<String, Integer> latency_stats_sample_rate = Maps.newHashMap();
-    public int message_ttl_in_seconds = 0;
-    public RetentionPolicies retention_policies = null;
-    public boolean deleted = false;
-    public String antiAffinityGroup;
+    public Map<BacklogQuota.BacklogQuotaType, BacklogQuota> backlog_quota_map;
+    public PersistencePolicies persistence;
+    public Map<String, Integer> latency_stats_sample_rate;
+    public int message_ttl_in_seconds;
+    public RetentionPolicies retention_policies;
+    public boolean deleted;
 
     public static final String FIRST_BOUNDARY = "0x00000000";
     public static final String LAST_BOUNDARY = "0xffffffff";
 
-    public boolean encryption_required = false;
-    public SubscriptionAuthMode subscription_auth_mode = SubscriptionAuthMode.None;
-
-    public int max_producers_per_topic = 0;
-    public int max_consumers_per_topic = 0;
-    public int max_consumers_per_subscription = 0;
-
-    public long compaction_threshold = 0;
-    public long offload_threshold = -1;
-    public Long offload_deletion_lag_ms = null;
-
-    public SchemaAutoUpdateCompatibilityStrategy schema_auto_update_compatibility_strategy =
-        SchemaAutoUpdateCompatibilityStrategy.Full;
+    public Policies() {
+        auth_policies = new AuthPolicies();
+        replication_clusters = Lists.newArrayList();
+        bundles = defaultBundle();
+        backlog_quota_map = Maps.newHashMap();
+        persistence = null;
+        latency_stats_sample_rate = Maps.newHashMap();
+        message_ttl_in_seconds = 0;
+        retention_policies = null;
+        deleted = false;
+    }
 
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof Policies) {
             Policies other = (Policies) obj;
-            return Objects.equals(auth_policies, other.auth_policies)
-                    && Objects.equals(replication_clusters, other.replication_clusters)
-                    && Objects.equals(backlog_quota_map, other.backlog_quota_map)
-                    && Objects.equals(clusterDispatchRate, other.clusterDispatchRate)
-                    && Objects.equals(clusterSubscribeRate, other.clusterSubscribeRate)
-                    && Objects.equals(deduplicationEnabled, other.deduplicationEnabled)
-                    && Objects.equals(persistence, other.persistence) && Objects.equals(bundles, other.bundles)
-                    && Objects.equals(latency_stats_sample_rate, other.latency_stats_sample_rate)
+            return Objects.equal(auth_policies, other.auth_policies)
+                    && Objects.equal(replication_clusters, other.replication_clusters)
+                    && Objects.equal(backlog_quota_map, other.backlog_quota_map)
+                    && Objects.equal(persistence, other.persistence) && Objects.equal(bundles, other.bundles)
+                    && Objects.equal(latency_stats_sample_rate, other.latency_stats_sample_rate)
                     && message_ttl_in_seconds == other.message_ttl_in_seconds
-                    && Objects.equals(retention_policies, other.retention_policies)
-                    && Objects.equals(encryption_required, other.encryption_required)
-                    && Objects.equals(subscription_auth_mode, other.subscription_auth_mode)
-                    && Objects.equals(antiAffinityGroup, other.antiAffinityGroup)
-                    && max_producers_per_topic == other.max_producers_per_topic
-                    && max_consumers_per_topic == other.max_consumers_per_topic
-                    && max_consumers_per_subscription == other.max_consumers_per_subscription
-                    && compaction_threshold == other.compaction_threshold
-                    && offload_threshold == other.offload_threshold
-                    && offload_deletion_lag_ms == other.offload_deletion_lag_ms
-                    && schema_auto_update_compatibility_strategy == other.schema_auto_update_compatibility_strategy;
+                    && Objects.equal(retention_policies, other.retention_policies);
         }
 
         return false;
@@ -103,33 +77,14 @@ public class Policies {
         return bundle;
     }
 
-    public static void setStorageQuota(Policies polices, BacklogQuota quota) {
-        if (polices == null) {
-            return;
-        }
-        polices.backlog_quota_map.put(BacklogQuota.BacklogQuotaType.destination_storage, quota);
-    }
-
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this).add("auth_policies", auth_policies)
+        return Objects.toStringHelper(this).add("auth_policies", auth_policies)
                 .add("replication_clusters", replication_clusters).add("bundles", bundles)
                 .add("backlog_quota_map", backlog_quota_map).add("persistence", persistence)
-                .add("deduplicationEnabled", deduplicationEnabled)
-                .add("clusterDispatchRate", clusterDispatchRate)
-                .add("clusterSubscribeRate", clusterSubscribeRate)
                 .add("latency_stats_sample_rate", latency_stats_sample_rate)
-                .add("antiAffinityGroup", antiAffinityGroup)
                 .add("message_ttl_in_seconds", message_ttl_in_seconds).add("retention_policies", retention_policies)
-                .add("deleted", deleted)
-                .add("encryption_required", encryption_required)
-                .add("subscription_auth_mode", subscription_auth_mode)
-                .add("max_producers_per_topic", max_producers_per_topic)
-                .add("max_consumers_per_topic", max_consumers_per_topic)
-                .add("max_consumers_per_subscription", max_consumers_per_topic)
-                .add("compaction_threshold", compaction_threshold)
-                .add("offload_threshold", offload_threshold)
-                .add("offload_deletion_lag_ms", offload_deletion_lag_ms)
-                .add("schema_auto_update_compatibility_strategy", schema_auto_update_compatibility_strategy).toString();
+                .add("deleted", deleted).toString();
     }
+    
 }

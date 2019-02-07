@@ -18,40 +18,33 @@
  */
 package org.apache.pulsar.client.impl;
 
-import com.google.common.util.concurrent.MoreExecutors;
-
-import io.netty.channel.EventLoopGroup;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.ssl.SslContext;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 
+import io.netty.channel.EventLoopGroup;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.ssl.SslContext;
+
 import org.apache.pulsar.client.api.Authentication;
 import org.apache.pulsar.client.api.AuthenticationDataProvider;
 import org.apache.pulsar.client.api.PulsarClientException;
-import org.apache.pulsar.client.api.PulsarClientException.NotFoundException;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.apache.pulsar.common.util.SecurityUtility;
-import org.asynchttpclient.AsyncCompletionHandler;
-import org.asynchttpclient.AsyncHttpClient;
-import org.asynchttpclient.AsyncHttpClientConfig;
-import org.asynchttpclient.BoundRequestBuilder;
-import org.asynchttpclient.DefaultAsyncHttpClient;
-import org.asynchttpclient.DefaultAsyncHttpClientConfig;
-import org.asynchttpclient.ListenableFuture;
-import org.asynchttpclient.Request;
-import org.asynchttpclient.Response;
+import org.asynchttpclient.*;
 import org.asynchttpclient.channel.DefaultKeepAliveStrategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.util.concurrent.MoreExecutors;
 
 public class HttpClient implements Closeable {
 
@@ -59,22 +52,25 @@ public class HttpClient implements Closeable {
     protected final static int DEFAULT_READ_TIMEOUT_IN_SECONDS = 30;
 
     protected final AsyncHttpClient httpClient;
-    protected final ServiceNameResolver serviceNameResolver;
+    protected final URL url;
     protected final Authentication authentication;
 
-    protected HttpClient(String serviceUrl, Authentication authentication,
-            EventLoopGroup eventLoopGroup, boolean tlsAllowInsecureConnection, String tlsTrustCertsFilePath)
-            throws PulsarClientException {
-        this(serviceUrl, authentication, eventLoopGroup, tlsAllowInsecureConnection,
-                tlsTrustCertsFilePath, DEFAULT_CONNECT_TIMEOUT_IN_SECONDS, DEFAULT_READ_TIMEOUT_IN_SECONDS);
+    protected HttpClient(String serviceUrl, Authentication authentication, EventLoopGroup eventLoopGroup,
+            boolean tlsAllowInsecureConnection, String tlsTrustCertsFilePath) throws PulsarClientException {
+        this(serviceUrl, authentication, eventLoopGroup, tlsAllowInsecureConnection, tlsTrustCertsFilePath,
+                DEFAULT_CONNECT_TIMEOUT_IN_SECONDS, DEFAULT_READ_TIMEOUT_IN_SECONDS);
     }
 
-    protected HttpClient(String serviceUrl, Authentication authentication,
-            EventLoopGroup eventLoopGroup, boolean tlsAllowInsecureConnection, String tlsTrustCertsFilePath,
-            int connectTimeoutInSeconds, int readTimeoutInSeconds) throws PulsarClientException {
+    protected HttpClient(String serviceUrl, Authentication authentication, EventLoopGroup eventLoopGroup,
+            boolean tlsAllowInsecureConnection, String tlsTrustCertsFilePath, int connectTimeoutInSeconds,
+            int readTimeoutInSeconds) throws PulsarClientException {
         this.authentication = authentication;
-        this.serviceNameResolver = new PulsarServiceNameResolver();
-        this.serviceNameResolver.updateServiceUrl(serviceUrl);
+        try {
+            // Ensure trailing "/" on url
+            url = new URL(serviceUrl);
+        } catch (MalformedURLException e) {
+            throw new PulsarClientException.InvalidServiceURL(e);
+        }
 
         DefaultAsyncHttpClientConfig.Builder confBuilder = new DefaultAsyncHttpClientConfig.Builder();
         confBuilder.setFollowRedirect(true);
@@ -85,25 +81,25 @@ public class HttpClient implements Closeable {
             @Override
             public boolean keepAlive(Request ahcRequest, HttpRequest request, HttpResponse response) {
                 // Close connection upon a server error or per HTTP spec
-                return (response.status().code() / 100 != 5) && super.keepAlive(ahcRequest, request, response);
+                return (response.getStatus().code() / 100 != 5) && super.keepAlive(ahcRequest, request, response);
             }
         });
 
-        if ("https".equals(serviceNameResolver.getServiceUri().getServiceName())) {
+        if ("https".equals(url.getProtocol())) {
             try {
                 SslContext sslCtx = null;
 
                 // Set client key and certificate if available
                 AuthenticationDataProvider authData = authentication.getAuthData();
                 if (authData.hasDataForTls()) {
-                    sslCtx = SecurityUtility.createNettySslContextForClient(tlsAllowInsecureConnection, tlsTrustCertsFilePath,
+                    sslCtx = SecurityUtility.createNettySslContext(tlsAllowInsecureConnection, tlsTrustCertsFilePath,
                             authData.getTlsCertificates(), authData.getTlsPrivateKey());
                 } else {
-                    sslCtx = SecurityUtility.createNettySslContextForClient(tlsAllowInsecureConnection, tlsTrustCertsFilePath);
+                    sslCtx = SecurityUtility.createNettySslContext(tlsAllowInsecureConnection, tlsTrustCertsFilePath);
                 }
 
                 confBuilder.setSslContext(sslCtx);
-                confBuilder.setUseInsecureTrustManager(tlsAllowInsecureConnection);
+                confBuilder.setAcceptAnyCertificate(tlsAllowInsecureConnection);
             } catch (Exception e) {
                 throw new PulsarClientException.InvalidConfigurationException(e);
             }
@@ -112,15 +108,7 @@ public class HttpClient implements Closeable {
         AsyncHttpClientConfig config = confBuilder.build();
         httpClient = new DefaultAsyncHttpClient(config);
 
-        log.debug("Using HTTP url: {}", serviceUrl);
-    }
-
-    String getServiceUrl() {
-        return this.serviceNameResolver.getServiceUrl();
-    }
-
-    void setServiceUrl(String serviceUrl) throws PulsarClientException {
-        this.serviceNameResolver.updateServiceUrl(serviceUrl);
+        log.debug("Using HTTP url: {}", this.url);
     }
 
     @Override
@@ -131,7 +119,7 @@ public class HttpClient implements Closeable {
     public <T> CompletableFuture<T> get(String path, Class<T> clazz) {
         final CompletableFuture<T> future = new CompletableFuture<>();
         try {
-            String requestUrl = new URL(serviceNameResolver.resolveHostUri().toURL(), path).toString();
+            String requestUrl = new URL(url, path).toString();
             AuthenticationDataProvider authData = authentication.getAuthData();
             BoundRequestBuilder builder = httpClient.prepareGet(requestUrl);
 
@@ -162,13 +150,8 @@ public class HttpClient implements Closeable {
                     Response response = responseFuture.get();
                     if (response.getStatusCode() != HttpURLConnection.HTTP_OK) {
                         log.warn("[{}] HTTP get request failed: {}", requestUrl, response.getStatusText());
-                        Exception e;
-                        if (response.getStatusCode() == HttpURLConnection.HTTP_NOT_FOUND) {
-                            e = new NotFoundException("Not found: " + response.getStatusText());
-                        } else {
-                            e = new PulsarClientException("HTTP get request failed: " + response.getStatusText());
-                        }
-                        future.completeExceptionally(e);
+                        future.completeExceptionally(
+                                new PulsarClientException("HTTP get request failed: " + response.getStatusText()));
                         return;
                     }
 
@@ -178,7 +161,7 @@ public class HttpClient implements Closeable {
                     log.warn("[{}] Error during HTTP get request: {}", requestUrl, e.getMessage());
                     future.completeExceptionally(new PulsarClientException(e));
                 }
-            }, MoreExecutors.directExecutor());
+            }, MoreExecutors.sameThreadExecutor());
 
         } catch (Exception e) {
             log.warn("[{}] Failed to get authentication data for lookup: {}", path, e.getMessage());

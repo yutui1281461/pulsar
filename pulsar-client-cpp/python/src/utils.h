@@ -39,6 +39,5 @@ inline void CHECK_RESULT(Result res) {
 struct AuthenticationWrapper {
     AuthenticationPtr auth;
 
-    AuthenticationWrapper();
     AuthenticationWrapper(const std::string& dynamicLibPath, const std::string& authParamsString);
 };

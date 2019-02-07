@@ -21,11 +21,8 @@ package org.apache.pulsar.admin.cli;
 import java.util.List;
 import java.util.Set;
 
-import org.apache.pulsar.client.admin.PulsarAdminException;
-import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.impl.MessageIdImpl;
-import org.apache.pulsar.common.naming.TopicDomain;
-import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.naming.DestinationDomain;
+import org.apache.pulsar.common.naming.DestinationName;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.policies.data.AuthAction;
 import org.apache.pulsar.common.util.ObjectMapperFactory;
@@ -33,87 +30,41 @@ import org.apache.pulsar.common.util.ObjectMapperFactory;
 import com.beust.jcommander.ParameterException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 
 abstract class CliCommand {
 
-    static String[] validatePropertyCluster(List<String> params) {
+    String[] validatePropertyCluster(List<String> params) {
         return splitParameter(params, 2);
     }
 
-    static String validateNamespace(List<String> params) {
+    String validateNamespace(List<String> params) {
         String namespace = checkArgument(params);
-        return NamespaceName.get(namespace).toString();
+        return new NamespaceName(namespace).toString();
     }
 
-    static String validateTopicName(List<String> params) {
-        String topic = checkArgument(params);
-        return TopicName.get(topic).toString();
+    String validateDestination(List<String> params) {
+        String destination = checkArgument(params);
+        return DestinationName.get(destination).toString();
     }
 
-    static String validatePersistentTopic(List<String> params) {
-        String topic = checkArgument(params);
-        TopicName topicName = TopicName.get(topic);
-        if (topicName.getDomain() != TopicDomain.persistent) {
+    String validatePersistentTopic(List<String> params) {
+        String destination = checkArgument(params);
+        DestinationName ds = DestinationName.get(destination);
+        if (ds.getDomain() != DestinationDomain.persistent) {
             throw new ParameterException("Need to provide a persistent topic name");
         }
-        return topicName.toString();
+        return ds.toString();
     }
 
-    static String validateNonPersistentTopic(List<String> params) {
-        String topic = checkArgument(params);
-        TopicName topicName = TopicName.get(topic);
-        if (topicName.getDomain() != TopicDomain.non_persistent) {
-            throw new ParameterException("Need to provide a non-persistent topic name");
-        }
-        return topicName.toString();
-    }
-
-    static void validateLatencySampleRate(int sampleRate) {
+    void validateLatencySampleRate(int sampleRate) {
         if (sampleRate < 0) {
             throw new ParameterException(
                     "Latency sample rate should be positive and non-zero (found " + sampleRate + ")");
         }
     }
 
-    static long validateSizeString(String s) {
-        char last = s.charAt(s.length() - 1);
-        String subStr = s.substring(0, s.length() - 1);
-        switch (last) {
-        case 'k':
-        case 'K':
-            return Long.parseLong(subStr) * 1024;
-
-        case 'm':
-        case 'M':
-            return Long.parseLong(subStr) * 1024 * 1024;
-
-        case 'g':
-        case 'G':
-            return Long.parseLong(subStr) * 1024 * 1024 * 1024;
-
-        case 't':
-        case 'T':
-            return Long.parseLong(subStr) * 1024 * 1024 * 1024 * 1024;
-
-        default:
-            return Long.parseLong(s);
-        }
-    }
-
-    static MessageId validateMessageIdString(String resetMessageIdStr) throws PulsarAdminException {
-        String[] messageId = resetMessageIdStr.split(":");
-        try {
-            Preconditions.checkArgument(messageId.length == 2);
-            return new MessageIdImpl(Long.parseLong(messageId[0]), Long.parseLong(messageId[1]), -1);
-        } catch (Exception e) {
-            throw new PulsarAdminException(
-                    "Invalid reset-position (must be in format: ledgerId:entryId) value " + resetMessageIdStr);
-        }
-    }
-
-    static String checkArgument(List<String> arguments) {
+    String checkArgument(List<String> arguments) {
         if (arguments.size() != 1) {
             throw new ParameterException("Need to provide just 1 parameter");
         }
@@ -121,7 +72,7 @@ abstract class CliCommand {
         return arguments.get(0);
     }
 
-    static private String[] splitParameter(List<String> params, int n) {
+    private String[] splitParameter(List<String> params, int n) {
         if (params.size() != 1) {
             throw new ParameterException("Need to provide just 1 parameter");
         }
@@ -134,7 +85,7 @@ abstract class CliCommand {
         return parts;
     }
 
-    static String getOneArgument(List<String> params) {
+    String getOneArgument(List<String> params) {
         if (params.size() != 1) {
             throw new ParameterException("Need to provide just 1 parameter");
         }
@@ -152,7 +103,7 @@ abstract class CliCommand {
      *            Validate against max arguments
      * @return
      */
-    static String getOneArgument(List<String> params, int pos, int maxArguments) {
+    String getOneArgument(List<String> params, int pos, int maxArguments) {
         if (params.size() != maxArguments) {
             throw new ParameterException(String.format("Need to provide %s parameters", maxArguments));
         }
@@ -160,7 +111,7 @@ abstract class CliCommand {
         return params.get(pos);
     }
 
-    static Set<AuthAction> getAuthActions(List<String> actions) {
+    Set<AuthAction> getAuthActions(List<String> actions) {
         Set<AuthAction> res = Sets.newTreeSet();
         for (String action : actions) {
             res.add(AuthAction.valueOf(action));
@@ -172,14 +123,6 @@ abstract class CliCommand {
     <T> void print(List<T> items) {
         for (T item : items) {
             System.out.println(item);
-        }
-    }
-
-    <T> void printList(T item) {
-        try {
-            System.out.println(writer.writeValueAsString(item));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
     }
 

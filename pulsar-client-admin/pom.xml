@@ -26,17 +26,23 @@
   <parent>
     <groupId>org.apache.pulsar</groupId>
     <artifactId>pulsar</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>1.19-incubating-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
-  <artifactId>pulsar-client-admin-original</artifactId>
-  <name>Pulsar Client Admin Original</name>
+  <artifactId>pulsar-client-admin</artifactId>
+  <name>Pulsar Client Admin</name>
 
   <dependencies>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>pulsar-client-original</artifactId>
+      <artifactId>pulsar-client</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>pulsar-common</artifactId>
       <version>${project.version}</version>
     </dependency>
 
@@ -51,29 +57,9 @@
     </dependency>
 
     <dependency>
-      <groupId>org.glassfish.jersey.media</groupId>
-      <artifactId>jersey-media-multipart</artifactId>
-    </dependency>
-
-    <dependency>
       <groupId>com.fasterxml.jackson.jaxrs</groupId>
       <artifactId>jackson-jaxrs-json-provider</artifactId>
     </dependency>
-
-    <dependency>
-      <groupId>org.glassfish.jersey.inject</groupId>
-      <artifactId>jersey-hk2</artifactId>
-    </dependency>
-
-   <dependency>
-     <groupId>javax.xml.bind</groupId>
-     <artifactId>jaxb-api</artifactId>
-   </dependency>
-
-   <dependency>
-     <groupId>javax.xml.bind</groupId>
-     <artifactId>activation</artifactId>
-   </dependency>
 
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -84,10 +70,68 @@
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
-
+    
     <dependency>
       <groupId>com.google.code.gson</groupId>
       <artifactId>gson</artifactId>
     </dependency>
   </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals>
+              <goal>shade</goal>
+            </goals>
+            <configuration>
+              <createDependencyReducedPom>true</createDependencyReducedPom>
+              <shadedArtifactAttached>true</shadedArtifactAttached>
+              <shadedClassifierName>shaded</shadedClassifierName>
+              <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
+
+              <artifactSet>
+                <includes>
+                  <include>org.apache.commons:commons-lang3</include>
+                  <include>commons-codec:commons-codec</include>
+                  <include>commons-collections:commons-collections</include>
+                  <include>org.asynchttpclient:async-http-client</include>
+                  <include>com.google.protobuf:protobuf-java</include>
+                  <include>com.google.guava:guava</include>
+                  <include>com.google.code.gson:gson</include>
+                  <include>io.netty:netty</include>
+                  <include>io.netty:netty-all</include>
+                </includes>
+              </artifactSet>
+              <relocations>
+                <relocation>
+                  <pattern>org.apache.commons</pattern>
+                  <shadedPattern>pulsar-admin-shade.org.apache.commons</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.asynchttpclient</pattern>
+                  <shadedPattern>org.apache.pulsar.shade.org.asynchttpclient</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.google</pattern>
+                  <shadedPattern>pulsar-admin-shade.com.google</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.jboss.netty</pattern>
+                  <shadedPattern>pulsar-admin-shade.org.jboss.netty</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>io.netty</pattern>
+                  <shadedPattern>pulsar-admin-shade.io.netty</shadedPattern>
+                </relocation>
+              </relocations>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

@@ -1,29 +1,10 @@
-<!--
+If you have [authentication](../../admin/Authz#authentication-providers) enabled in your Pulsar {% popover instance %}, then you will need to perform a few authentication-related setup steps to use the Pulsar [admin interface](../../admin/AdminInterface). Those steps will vary depending on if you're using the [`pulsar-admin` command-line interface](#the-pulsar-admin-command-line-tool), the [REST API](#rest-api), or the [Java admin client](#java-admin-client).
 
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
+Before you get started using Pulsar's admin interface, you will need to complete a few setup steps that vary depending on whether you're using the [`pulsar-admin` CLI tool](#pulsar-admin-cli-tool), [Java API](#java-api), or [REST API](#rest-api) directly.
 
-      http://www.apache.org/licenses/LICENSE-2.0
+### The `pulsar-admin` command-line tool
 
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
-
--->
-
-Each of Pulsar's three admin interfaces---the [`pulsar-admin`](../../reference/CliTools#pulsar-admin) CLI tool, the [Java admin API](/api/admin), and the [REST API](../../reference/RestApi)---requires some special setup if you have [authentication](../../security/overview#authentication-providers) enabled in your Pulsar {% popover instance %}.
-
-### pulsar-admin
-
-If you have [authentication](../../security/overview#authentication-providers) enabled, you will need to provide an auth configuration to use the [`pulsar-admin`](../../reference/CliTools#pulsar-admin) tool. By default, the configuration for the `pulsar-admin` tool is found in the [`conf/client.conf`](../../reference/Configuration#client) file. Here are the available parameters:
+If a Pulsar {% popover broker %} has [authentication](../../admin/Authz#authentication-providers) enabled, you will need to provide an auth configuration to use the [`pulsar-admin`](../../reference/CliTools#pulsar-admin) tool. By default, the configuration for the `pulsar-admin` tool is found in the [`conf/client.conf`](../../reference/Configuration#client) file. Here are the available parameters:
 
 {% include config.html id="client" %}
 
@@ -33,7 +14,7 @@ You can find documentation for the REST API exposed by Pulsar {% popover brokers
 
 ### Java admin client
 
-To use the Java admin API, instantiate a {% javadoc PulsarAdmin admin org.apache.pulsar.client.admin.PulsarAdmin %} object, specifying a URL for a Pulsar {% popover broker %} and a {% javadoc ClientConfiguration admin org.apache.pulsar.client.admin.ClientConfiguration %}. Here's a minimal example using `localhost`:
+To use the Java admin API, instantiate a {% javadoc PulsarAdmin admin com.yahoo.pulsar.client.admin.PulsarAdmin %} object, specifying a URL for a Pulsar {% popover broker %} and a {% javadoc ClientConfiguration admin com.yahoo.pulsar.client.admin.ClientConfiguration %}. Here's a minimal example using `localhost`:
 
 ```java
 URL url = new URL("http://localhost:8080");

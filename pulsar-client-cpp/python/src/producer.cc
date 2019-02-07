@@ -18,8 +18,6 @@
  */
 #include "utils.h"
 
-#include <functional>
-
 void Producer_send(Producer& producer, const Message& message) {
     Result res;
     Py_BEGIN_ALLOW_THREADS
@@ -51,8 +49,7 @@ void Producer_sendAsync(Producer& producer, const Message& message, py::object c
     Py_XINCREF(pyCallback);
 
     Py_BEGIN_ALLOW_THREADS
-    producer.sendAsync(message, std::bind(Producer_sendAsyncCallback, pyCallback,
-            std::placeholders::_1, std::placeholders::_2));
+    producer.sendAsync(message, boost::bind(Producer_sendAsyncCallback, pyCallback, _1, _2));
     Py_END_ALLOW_THREADS
 }
 
@@ -71,10 +68,6 @@ void export_producer() {
     class_<Producer>("Producer", no_init)
             .def("topic", &Producer::getTopic, "return the topic to which producer is publishing to",
                  return_value_policy<copy_const_reference>())
-            .def("producer_name", &Producer::getProducerName,
-                 "return the producer name which could have been assigned by the system or specified by the client",
-                 return_value_policy<copy_const_reference>())
-            .def("last_sequence_id", &Producer::getLastSequenceId)
             .def("send", &Producer_send,
                  "Publish a message on the topic associated with this Producer.\n"
                          "\n"

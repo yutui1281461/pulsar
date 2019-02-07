@@ -24,7 +24,7 @@
   <parent>
     <groupId>org.apache.pulsar</groupId>
     <artifactId>pulsar</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>1.19-incubating-SNAPSHOT</version>
   </parent>
 
   <artifactId>pulsar-proxy</artifactId>
@@ -33,7 +33,7 @@
   <dependencies>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>pulsar-client-original</artifactId>
+      <artifactId>pulsar-common</artifactId>
       <version>${project.version}</version>
     </dependency>
 
@@ -65,11 +65,6 @@
     </dependency>
 
     <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-proxy</artifactId>
-    </dependency>
-
-    <dependency>
       <groupId>org.glassfish.jersey.core</groupId>
       <artifactId>jersey-server</artifactId>
     </dependency>
@@ -90,23 +85,13 @@
     </dependency>
 
     <dependency>
-      <groupId>org.glassfish.jersey.inject</groupId>
-      <artifactId>jersey-hk2</artifactId>
-    </dependency>
-
-   <dependency>
-     <groupId>javax.xml.bind</groupId>
-     <artifactId>jaxb-api</artifactId>
-   </dependency>
-
-   <dependency>
-     <groupId>javax.xml.bind</groupId>
-     <artifactId>activation</artifactId>
-   </dependency>
-
-    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
+    </dependency>
+
+    <dependency>
+      <artifactId>slf4j-log4j12</artifactId>
+      <groupId>org.slf4j</groupId>
     </dependency>
 
     <dependency>
@@ -122,11 +107,6 @@
     <dependency>
       <groupId>io.prometheus</groupId>
       <artifactId>simpleclient_servlet</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>io.prometheus</groupId>
-      <artifactId>simpleclient_jetty</artifactId>
     </dependency>
 
     <dependency>
@@ -146,7 +126,7 @@
 
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>managed-ledger-original</artifactId>
+      <artifactId>managed-ledger</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>

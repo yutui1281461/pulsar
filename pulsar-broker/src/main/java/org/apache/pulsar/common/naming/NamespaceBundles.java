@@ -26,6 +26,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.SortedSet;
 
+import org.apache.pulsar.common.naming.DestinationName;
+import org.apache.pulsar.common.naming.NamespaceName;
+
 import com.google.common.base.Objects;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
@@ -35,8 +38,6 @@ public class NamespaceBundles {
     private final NamespaceName nsname;
     private final ArrayList<NamespaceBundle> bundles;
     private final NamespaceBundleFactory factory;
-    private final long version;
-
     protected final long[] partitions;
 
     public static final Long FULL_LOWER_BOUND = 0x00000000L;
@@ -48,17 +49,16 @@ public class NamespaceBundles {
         this(nsname, convertPartitions(partitionsSet), factory);
     }
 
-    public NamespaceBundles(NamespaceName nsname, long[] partitions, NamespaceBundleFactory factory, long version) {
+    public NamespaceBundles(NamespaceName nsname, long[] partitions, NamespaceBundleFactory factory) {
         // check input arguments
         this.nsname = checkNotNull(nsname);
         this.factory = checkNotNull(factory);
-        this.version = version;
         checkArgument(partitions.length > 0, "Can't create bundles w/o partition boundaries");
 
         // calculate bundles based on partition boundaries
         this.bundles = Lists.newArrayList();
         fullBundle = new NamespaceBundle(nsname,
-            Range.range(FULL_LOWER_BOUND, BoundType.CLOSED, FULL_UPPER_BOUND, BoundType.CLOSED), factory);
+                Range.range(FULL_LOWER_BOUND, BoundType.CLOSED, FULL_UPPER_BOUND, BoundType.CLOSED), factory);
 
         if (partitions.length > 0) {
             if (partitions.length == 1) {
@@ -86,18 +86,10 @@ public class NamespaceBundles {
         }
     }
 
-    public NamespaceBundles(NamespaceName nsname, long[] partitions, NamespaceBundleFactory factory) {
-        this(nsname, partitions, factory, -1);
-    }
-
-    public NamespaceBundle findBundle(TopicName topicName) {
-        checkArgument(this.nsname.equals(topicName.getNamespaceObject()));
-        long hashCode = factory.getLongHashCode(topicName.toString());
-        NamespaceBundle bundle = getBundle(hashCode);
-        if (topicName.getDomain().equals(TopicDomain.non_persistent)) {
-            bundle.setHasNonPersistentTopic(true);
-        }
-        return bundle;
+    public NamespaceBundle findBundle(DestinationName dn) {
+        checkArgument(this.nsname.equals(dn.getNamespaceObject()));
+        long hashCode = factory.getLongHashCode(dn.toString());
+        return getBundle(hashCode);
     }
 
     public List<NamespaceBundle> getBundles() {
@@ -143,9 +135,5 @@ public class NamespaceBundles {
             return (Objects.equal(this.nsname, other.nsname) && Objects.equal(this.bundles, other.bundles));
         }
         return false;
-    }
-
-    public long getVersion() {
-        return version;
     }
 }

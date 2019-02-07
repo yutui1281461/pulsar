@@ -19,14 +19,13 @@
 package org.apache.pulsar.proxy.server;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.Thread.setDefaultUncaughtExceptionHandler;
 import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.StringUtils.isEmpty;
 import static org.slf4j.bridge.SLF4JBridgeHandler.install;
 import static org.slf4j.bridge.SLF4JBridgeHandler.removeHandlersForRootLogger;
 
-import org.apache.pulsar.broker.authentication.AuthenticationService;
 import org.apache.pulsar.common.configuration.PulsarConfigurationLoader;
-import org.eclipse.jetty.proxy.ProxyServlet;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,12 +35,6 @@ import com.beust.jcommander.Parameter;
 
 import io.prometheus.client.exporter.MetricsServlet;
 import io.prometheus.client.hotspot.DefaultExports;
-import org.apache.pulsar.common.configuration.VipStatus;
-
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-
 
 /**
  * Starts an instance of the Pulsar ProxyService
@@ -55,13 +48,8 @@ public class ProxyServiceStarter {
     @Parameter(names = { "-zk", "--zookeeper-servers" }, description = "Local zookeeper connection string")
     private String zookeeperServers = "";
 
-    @Deprecated
     @Parameter(names = { "-gzk", "--global-zookeeper-servers" }, description = "Global zookeeper connection string")
     private String globalZookeeperServers = "";
-
-    @Parameter(names = { "-cs", "--configuration-store-servers" },
-        description = "Configuration store connection string")
-    private String configurationStoreServers = "";
 
     @Parameter(names = { "-h", "--help" }, description = "Show this help message")
     private boolean help = false;
@@ -70,10 +58,8 @@ public class ProxyServiceStarter {
         // setup handlers
         removeHandlersForRootLogger();
         install();
-
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss,SSS");
-        Thread.setDefaultUncaughtExceptionHandler((thread, exception) -> {
-            System.out.println(String.format("%s [%s] error Uncaught exception in thread %s: %s", dateFormat.format(new Date()), thread.getContextClassLoader(), thread.getName(), exception.getMessage()));
+        setDefaultUncaughtExceptionHandler((thread, exception) -> {
+            log.error("Uncaught exception in thread {}: {}", thread.getName(), exception.getMessage(), exception);
         });
 
         JCommander jcommander = new JCommander();
@@ -99,48 +85,34 @@ public class ProxyServiceStarter {
 
         if (!isBlank(globalZookeeperServers)) {
             // Use globalZookeeperServers from command line
-            config.setConfigurationStoreServers(globalZookeeperServers);
-        }
-        if (!isBlank(configurationStoreServers)) {
-            // Use configurationStoreServers from command line
-            config.setConfigurationStoreServers(configurationStoreServers);
+            config.setGlobalZookeeperServers(globalZookeeperServers);
         }
 
-        if ((isBlank(config.getBrokerServiceURL()) && isBlank(config.getBrokerServiceURLTLS()))
-                || config.isAuthorizationEnabled()) {
-            checkArgument(!isEmpty(config.getZookeeperServers()), "zookeeperServers must be provided");
-            checkArgument(!isEmpty(config.getConfigurationStoreServers()),
-                    "configurationStoreServers must be provided");
-        }
+        checkArgument(!isEmpty(config.getZookeeperServers()), "zookeeperServers must be provided");
+        checkArgument(!isEmpty(config.getGlobalZookeeperServers()), "globalZookeeperServers must be provided");
 
-        if ((!config.isTlsEnabledWithBroker() && isBlank(config.getBrokerWebServiceURL()))
-                || (config.isTlsEnabledWithBroker() && isBlank(config.getBrokerWebServiceURLTLS()))) {
-            checkArgument(!isEmpty(config.getZookeeperServers()), "zookeeperServers must be provided");
-        }
-
-        java.security.Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-
-        AuthenticationService authenticationService = new AuthenticationService(
-                PulsarConfigurationLoader.convertFrom(config));
-        // create proxy service
-        ProxyService proxyService = new ProxyService(config, authenticationService);
+        // create broker service
+        ProxyService discoveryService = new ProxyService(config);
         // create a web-service
-        final WebServer server = new WebServer(config, authenticationService);
+        final WebServer server = new WebServer(config);
 
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            try {
-                proxyService.close();
-                server.stop();
-            } catch (Exception e) {
-                log.warn("server couldn't stop gracefully {}", e.getMessage(), e);
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                try {
+                    discoveryService.close();
+                    server.stop();
+                } catch (Exception e) {
+                    log.warn("server couldn't stop gracefully {}", e.getMessage(), e);
+                }
             }
-        }));
+        });
 
-        proxyService.start();
+        discoveryService.start();
 
         // Setup metrics
         DefaultExports.initialize();
-        addWebServerHandlers(server, config, proxyService.getDiscoveryProvider());
+        server.addServlet("/metrics", new ServletHolder(MetricsServlet.class));
 
         // start web-service
         server.start();
@@ -148,28 +120,6 @@ public class ProxyServiceStarter {
 
     public static void main(String[] args) throws Exception {
         new ProxyServiceStarter(args);
-    }
-
-    static void addWebServerHandlers(WebServer server,
-                                     ProxyConfiguration config,
-                                     BrokerDiscoveryProvider discoveryProvider) {
-        server.addServlet("/metrics", new ServletHolder(MetricsServlet.class));
-        server.addRestResources("/", VipStatus.class.getPackage().getName(),
-                VipStatus.ATTRIBUTE_STATUS_FILE_PATH, config.getStatusFilePath());
-
-        AdminProxyHandler adminProxyHandler = new AdminProxyHandler(config, discoveryProvider);
-        ServletHolder servletHolder = new ServletHolder(adminProxyHandler);
-        servletHolder.setInitParameter("preserveHost", "true");
-        server.addServlet("/admin", servletHolder);
-        server.addServlet("/lookup", servletHolder);
-
-        for (ProxyConfiguration.HttpReverseProxyConfig revProxy : config.getHttpReverseProxyConfigs()) {
-            log.debug("Adding reverse proxy with config {}", revProxy);
-            ServletHolder proxyHolder = new ServletHolder(ProxyServlet.Transparent.class);
-            proxyHolder.setInitParameter("proxyTo", revProxy.getProxyTo());
-            proxyHolder.setInitParameter("prefix", "/");
-            server.addServlet(revProxy.getPath(), proxyHolder);
-        }
     }
 
     private static final Logger log = LoggerFactory.getLogger(ProxyServiceStarter.class);

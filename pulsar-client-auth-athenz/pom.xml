@@ -25,7 +25,7 @@
   <parent>
     <groupId>org.apache.pulsar</groupId>
     <artifactId>pulsar</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>1.19-incubating-SNAPSHOT</version>
     <relativePath>..</relativePath>
   </parent>
 
@@ -37,7 +37,7 @@
 
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>pulsar-client-original</artifactId>
+      <artifactId>pulsar-client</artifactId>
       <version>${project.parent.version}</version>
     </dependency>
 

@@ -20,14 +20,8 @@ package org.apache.pulsar.common.api;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundHandlerAdapter;
-
-import org.apache.pulsar.common.api.proto.PulsarApi;
 import org.apache.pulsar.common.api.proto.PulsarApi.BaseCommand;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandAck;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandActiveConsumerChange;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandCloseConsumer;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandCloseProducer;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandConnect;
@@ -36,10 +30,6 @@ import org.apache.pulsar.common.api.proto.PulsarApi.CommandConsumerStats;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandConsumerStatsResponse;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandError;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandFlow;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandGetSchema;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandGetSchemaResponse;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandGetTopicsOfNamespace;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandGetTopicsOfNamespaceResponse;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandLookupTopic;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandLookupTopicResponse;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandMessage;
@@ -51,7 +41,6 @@ import org.apache.pulsar.common.api.proto.PulsarApi.CommandProducer;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandProducerSuccess;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandReachedEndOfTopic;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandRedeliverUnacknowledgedMessages;
-import org.apache.pulsar.common.api.proto.PulsarApi.CommandSeek;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandSend;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandSendError;
 import org.apache.pulsar.common.api.proto.PulsarApi.CommandSendReceipt;
@@ -61,6 +50,10 @@ import org.apache.pulsar.common.api.proto.PulsarApi.CommandUnsubscribe;
 import org.apache.pulsar.common.util.protobuf.ByteBufCodedInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 
 public abstract class PulsarDecoder extends ChannelInboundHandlerAdapter {
 
@@ -121,12 +114,9 @@ public abstract class PulsarDecoder extends ChannelInboundHandlerAdapter {
 
             case ACK:
                 checkArgument(cmd.hasAck());
-                CommandAck ack = cmd.getAck();
-                handleAck(ack);
-                for (int i = 0; i < ack.getMessageIdCount(); i++) {
-                    ack.getMessageId(i).recycle();
-                }
-                ack.recycle();
+                handleAck(cmd.getAck());
+                cmd.getAck().getMessageId().recycle();
+                cmd.getAck().recycle();
                 break;
 
             case CLOSE_CONSUMER:
@@ -221,12 +211,6 @@ public abstract class PulsarDecoder extends ChannelInboundHandlerAdapter {
                 cmd.getUnsubscribe().recycle();
                 break;
 
-            case SEEK:
-                checkArgument(cmd.hasSeek());
-                handleSeek(cmd.getSeek());
-                cmd.getSeek().recycle();
-                break;
-
             case PING:
                 checkArgument(cmd.hasPing());
                 handlePing(cmd.getPing());
@@ -261,47 +245,6 @@ public abstract class PulsarDecoder extends ChannelInboundHandlerAdapter {
                 checkArgument(cmd.hasReachedEndOfTopic());
                 handleReachedEndOfTopic(cmd.getReachedEndOfTopic());
                 cmd.getReachedEndOfTopic().recycle();
-                break;
-
-            case GET_LAST_MESSAGE_ID:
-                checkArgument(cmd.hasGetLastMessageId());
-                handleGetLastMessageId(cmd.getGetLastMessageId());
-                cmd.getGetLastMessageId().recycle();
-                break;
-
-            case GET_LAST_MESSAGE_ID_RESPONSE:
-                checkArgument(cmd.hasGetLastMessageIdResponse());
-                handleGetLastMessageIdSuccess(cmd.getGetLastMessageIdResponse());
-                cmd.getGetLastMessageIdResponse().recycle();
-                break;
-
-            case ACTIVE_CONSUMER_CHANGE:
-                handleActiveConsumerChange(cmd.getActiveConsumerChange());
-                cmd.getActiveConsumerChange().recycle();
-                break;
-
-            case GET_TOPICS_OF_NAMESPACE:
-                checkArgument(cmd.hasGetTopicsOfNamespace());
-                handleGetTopicsOfNamespace(cmd.getGetTopicsOfNamespace());
-                cmd.getGetTopicsOfNamespace().recycle();
-                break;
-
-            case GET_TOPICS_OF_NAMESPACE_RESPONSE:
-                checkArgument(cmd.hasGetTopicsOfNamespaceResponse());
-                handleGetTopicsOfNamespaceSuccess(cmd.getGetTopicsOfNamespaceResponse());
-                cmd.getGetTopicsOfNamespaceResponse().recycle();
-                break;
-
-            case GET_SCHEMA:
-                checkArgument(cmd.hasGetSchema());
-                handleGetSchema(cmd.getGetSchema());
-                cmd.getGetSchema().recycle();
-                break;
-
-            case GET_SCHEMA_RESPONSE:
-                checkArgument(cmd.hasGetSchemaResponse());
-                handleGetSchemaResponse(cmd.getGetSchemaResponse());
-                cmd.getGetSchemaResponse().recycle();
                 break;
             }
         } finally {
@@ -383,14 +326,6 @@ public abstract class PulsarDecoder extends ChannelInboundHandlerAdapter {
         throw new UnsupportedOperationException();
     }
 
-    protected void handleSeek(CommandSeek seek) {
-        throw new UnsupportedOperationException();
-    }
-
-    protected void handleActiveConsumerChange(CommandActiveConsumerChange change) {
-        throw new UnsupportedOperationException();
-    }
-
     protected void handleSuccess(CommandSuccess success) {
         throw new UnsupportedOperationException();
     }
@@ -428,29 +363,6 @@ public abstract class PulsarDecoder extends ChannelInboundHandlerAdapter {
     }
 
     protected void handleReachedEndOfTopic(CommandReachedEndOfTopic commandReachedEndOfTopic) {
-        throw new UnsupportedOperationException();
-    }
-
-    protected void handleGetLastMessageId(PulsarApi.CommandGetLastMessageId getLastMessageId) {
-        throw new UnsupportedOperationException();
-    }
-    protected void handleGetLastMessageIdSuccess(PulsarApi.CommandGetLastMessageIdResponse success) {
-        throw new UnsupportedOperationException();
-    }
-
-    protected void handleGetTopicsOfNamespace(CommandGetTopicsOfNamespace commandGetTopicsOfNamespace) {
-        throw new UnsupportedOperationException();
-    }
-
-    protected void handleGetTopicsOfNamespaceSuccess(CommandGetTopicsOfNamespaceResponse response) {
-        throw new UnsupportedOperationException();
-    }
-
-    protected void handleGetSchema(CommandGetSchema commandGetSchema) {
-        throw new UnsupportedOperationException();
-    }
-
-    protected void handleGetSchemaResponse(CommandGetSchemaResponse commandGetSchemaResponse) {
         throw new UnsupportedOperationException();
     }
 

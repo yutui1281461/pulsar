@@ -20,37 +20,25 @@
 #define LIB_CONSUMERCONFIGURATIONIMPL_H_
 
 #include <pulsar/ConsumerConfiguration.h>
+#include <boost/make_shared.hpp>
 
 namespace pulsar {
 struct ConsumerConfigurationImpl {
-    SchemaInfo schemaInfo;
     long unAckedMessagesTimeoutMs;
     ConsumerType consumerType;
     MessageListener messageListener;
     bool hasMessageListener;
     int receiverQueueSize;
-    int maxTotalReceiverQueueSizeAcrossPartitions;
     std::string consumerName;
     long brokerConsumerStatsCacheTimeInMs;
-    CryptoKeyReaderPtr cryptoKeyReader;
-    ConsumerCryptoFailureAction cryptoFailureAction;
-    bool readCompacted;
-    int patternAutoDiscoveryPeriod;
-    std::map<std::string, std::string> properties;
     ConsumerConfigurationImpl()
-        : schemaInfo(),
-          unAckedMessagesTimeoutMs(0),
-          consumerType(ConsumerExclusive),
-          messageListener(),
-          hasMessageListener(false),
-          brokerConsumerStatsCacheTimeInMs(30 * 1000),  // 30 seconds
-          receiverQueueSize(1000),
-          maxTotalReceiverQueueSizeAcrossPartitions(50000),
-          cryptoKeyReader(),
-          cryptoFailureAction(ConsumerCryptoFailureAction::FAIL),
-          readCompacted(false),
-          patternAutoDiscoveryPeriod(60),
-          properties() {}
+            : unAckedMessagesTimeoutMs(0),
+              consumerType(ConsumerExclusive),
+              messageListener(),
+              hasMessageListener(false),
+              brokerConsumerStatsCacheTimeInMs(30 * 1000), // 30 seconds
+              receiverQueueSize(1000) {
+    }
 };
-}  // namespace pulsar
+}
 #endif /* LIB_CONSUMERCONFIGURATIONIMPL_H_ */

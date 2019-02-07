@@ -42,15 +42,10 @@ public class PrometheusMetricsServlet extends HttpServlet {
     private static final long serialVersionUID = 1L;
 
     private final PulsarService pulsar;
-    private final boolean shouldExportTopicMetrics;
-    private final boolean shouldExportConsumerMetrics;
-
     private ExecutorService executor = null;
 
-    public PrometheusMetricsServlet(PulsarService pulsar, boolean includeTopicMetrics, boolean includeConsumerMetrics) {
+    public PrometheusMetricsServlet(PulsarService pulsar) {
         this.pulsar = pulsar;
-        this.shouldExportTopicMetrics = includeTopicMetrics;
-        this.shouldExportConsumerMetrics = includeConsumerMetrics;
     }
 
     @Override
@@ -62,12 +57,13 @@ public class PrometheusMetricsServlet extends HttpServlet {
     protected void doGet(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
         AsyncContext context = request.startAsync();
+
         executor.execute(safeRun(() -> {
             HttpServletResponse res = (HttpServletResponse) context.getResponse();
             try {
                 res.setStatus(HttpStatus.OK_200);
                 res.setContentType("text/plain");
-                PrometheusMetricsGenerator.generate(pulsar, shouldExportTopicMetrics, shouldExportConsumerMetrics, res.getOutputStream());
+                PrometheusMetricsGenerator.generate(pulsar, res.getOutputStream());
                 context.complete();
 
             } catch (IOException e) {

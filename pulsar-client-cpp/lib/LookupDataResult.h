@@ -22,58 +22,69 @@
 #include <lib/Future.h>
 #include <pulsar/Result.h>
 
-#include <iostream>
-#include <memory>
-
 namespace pulsar {
 class LookupDataResult;
-typedef std::shared_ptr<LookupDataResult> LookupDataResultPtr;
+typedef boost::shared_ptr<LookupDataResult> LookupDataResultPtr;
 typedef Promise<Result, LookupDataResultPtr> LookupDataResultPromise;
-typedef std::shared_ptr<LookupDataResultPromise> LookupDataResultPromisePtr;
+typedef boost::shared_ptr<LookupDataResultPromise> LookupDataResultPromisePtr;
 
 class LookupDataResult {
-   public:
-    void setBrokerUrl(const std::string& brokerUrl) { brokerUrl_ = brokerUrl; }
-    void setBrokerUrlTls(const std::string& brokerUrlTls) { brokerUrlTls_ = brokerUrlTls; }
-    const std::string& getBrokerUrl() const { return brokerUrl_; }
-    const std::string& getBrokerUrlTls() const { return brokerUrlTls_; }
-
-    bool isAuthoritative() const { return authoritative; }
-
-    void setAuthoritative(bool authoritative) { this->authoritative = authoritative; }
-
-    int getPartitions() const { return partitions; }
-
-    void setPartitions(int partitions) { this->partitions = partitions; }
-
-    bool isRedirect() const { return redirect; }
-
-    void setRedirect(bool redirect) { this->redirect = redirect; }
-
-    bool shouldProxyThroughServiceUrl() const { return proxyThroughServiceUrl_; }
-
-    void setShouldProxyThroughServiceUrl(bool proxyThroughServiceUrl) {
-        proxyThroughServiceUrl_ = proxyThroughServiceUrl;
+ public:
+    void setBrokerUrl(const std::string& brokerUrl) {
+        brokerUrl_ = brokerUrl;
+    }
+    void setBrokerUrlSsl(const std::string& brokerUrlSsl) {
+        brokerUrlSsl_ = brokerUrlSsl;
+    }
+    std::string getBrokerUrl() {
+        return brokerUrl_;
+    }
+    std::string getBrokerUrlSsl() {
+        return brokerUrlSsl_;
     }
 
-   private:
+    bool isAuthoritative() const {
+        return authoritative;
+    }
+
+    void setAuthoritative(bool authoritative) {
+        this->authoritative = authoritative;
+    }
+
+    int getPartitions() const {
+        return partitions;
+    }
+
+    void setPartitions(int partitions) {
+        this->partitions = partitions;
+    }
+
+    bool isRedirect() const {
+        return redirect;
+    }
+
+    void setRedirect(bool redirect) {
+        this->redirect = redirect;
+    }
+
+ private:
     friend inline std::ostream& operator<<(std::ostream& os, const LookupDataResult& b);
     std::string brokerUrl_;
-    std::string brokerUrlTls_;
+    std::string brokerUrlSsl_;
     int partitions;
     bool authoritative;
     bool redirect;
-
-    bool proxyThroughServiceUrl_;
 };
 
 std::ostream& operator<<(std::ostream& os, const LookupDataResult& b) {
-    os << "{ LookupDataResult [brokerUrl_ = " << b.brokerUrl_ << "] [brokerUrlTls_ = " << b.brokerUrlTls_
-       << "] [partitions = " << b.partitions << "] [authoritative = " << b.authoritative
-       << "] [redirect = " << b.redirect << "] proxyThroughServiceUrl = " << b.proxyThroughServiceUrl_
-       << "] }";
+    os << "{ LookupDataResult [brokerUrl_ = " << b.brokerUrl_ << "] [brokerUrlSsl_ = "
+            << b.brokerUrlSsl_ << "] [partitions = "
+            << b.partitions << "] [authoritative = "
+            << b.authoritative << "] [redirect = " << b.redirect
+            << "]";
     return os;
 }
-}  // namespace pulsar
 
-#endif  // _PULSAR_LOOKUP_DATA_RESULT_HEADER_
+}
+
+#endif // _PULSAR_LOOKUP_DATA_RESULT_HEADER_

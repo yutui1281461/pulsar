@@ -18,9 +18,8 @@
  */
 package org.apache.pulsar.broker.loadbalance;
 
+import java.io.IOException;
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 
 import org.apache.pulsar.broker.PulsarServerException;
 import org.apache.pulsar.broker.PulsarService;
@@ -29,8 +28,9 @@ import org.apache.pulsar.broker.loadbalance.impl.ModularLoadManagerWrapper;
 import org.apache.pulsar.broker.loadbalance.impl.SimpleLoadManagerImpl;
 import org.apache.pulsar.common.naming.ServiceUnitId;
 import org.apache.pulsar.common.stats.Metrics;
-import org.apache.pulsar.policies.data.loadbalancer.LoadManagerReport;
+import org.apache.pulsar.policies.data.loadbalancer.LoadReport;
 import org.apache.pulsar.policies.data.loadbalancer.ServiceLookupData;
+import org.apache.pulsar.policies.data.loadbalancer.SystemResourceUsage;
 import org.apache.pulsar.zookeeper.ZooKeeperCache.Deserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -57,12 +57,12 @@ public interface LoadManager {
     /**
      * Returns the Least Loaded Resource Unit decided by some algorithm or criteria which is implementation specific
      */
-    Optional<ResourceUnit> getLeastLoaded(ServiceUnitId su) throws Exception;
+    ResourceUnit getLeastLoaded(ServiceUnitId su) throws Exception;
 
     /**
      * Generate the load report
      */
-    LoadManagerReport generateLoadReport() throws Exception;
+    LoadReport generateLoadReport() throws Exception;
 
     /**
      * Returns {@link Deserializer} to deserialize load report
@@ -108,14 +108,6 @@ public interface LoadManager {
      * @throws Exception
      */
     public void disableBroker() throws Exception;
-    
-    /**
-     * Get list of available brokers in cluster
-     * 
-     * @return
-     * @throws Exception 
-     */
-    Set<String> getAvailableBrokers() throws Exception;
 
     public void stop() throws PulsarServerException;
 
@@ -148,5 +140,4 @@ public interface LoadManager {
         // If we failed to create a load manager, default to SimpleLoadManagerImpl.
         return new SimpleLoadManagerImpl(pulsar);
     }
-
 }

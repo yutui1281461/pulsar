@@ -21,22 +21,22 @@
 #include "LogUtils.h"
 
 #include <boost/algorithm/string.hpp>
-#include <memory>
+#include <boost/make_shared.hpp>
 #include <vector>
 #include <iostream>
 #include <sstream>
 
 DECLARE_LOG_OBJECT()
-namespace pulsar {
 
-std::shared_ptr<NamespaceName> NamespaceName::get(const std::string& property, const std::string& cluster,
-                                                  const std::string& namespaceName) {
+boost::shared_ptr<NamespaceName> NamespaceName::get(const std::string& property,
+                                                    const std::string& cluster,
+                                                    const std::string& namespaceName) {
     if (validateNamespace(property, cluster, namespaceName)) {
-        std::shared_ptr<NamespaceName> ptr(new NamespaceName(property, cluster, namespaceName));
+        boost::shared_ptr<NamespaceName> ptr(new NamespaceName(property, cluster, namespaceName));
         return ptr;
     } else {
         LOG_DEBUG("Returning a null NamespaceName object");
-        return std::shared_ptr<NamespaceName>();
+        return boost::shared_ptr<NamespaceName>();
     }
 }
 
@@ -53,58 +53,30 @@ NamespaceName::NamespaceName(const std::string& property, const std::string& clu
 bool NamespaceName::validateNamespace(const std::string& property, const std::string& cluster,
                                       const std::string& namespaceName) {
     if (!property.empty() && !cluster.empty() && !namespaceName.empty()) {
-        return NamedEntity::checkName(property) && NamedEntity::checkName(cluster) &&
-               NamedEntity::checkName(namespaceName);
+        return NamedEntity::checkName(property) && NamedEntity::checkName(cluster)
+                && NamedEntity::checkName(namespaceName);
     } else {
         LOG_DEBUG("Empty parameters passed for validating namespace");
         return false;
     }
 }
 
-std::shared_ptr<NamespaceName> NamespaceName::get(const std::string& property,
-                                                  const std::string& namespaceName) {
-    if (validateNamespace(property, namespaceName)) {
-        std::shared_ptr<NamespaceName> ptr(new NamespaceName(property, namespaceName));
-        return ptr;
-    } else {
-        LOG_DEBUG("Returning a null NamespaceName object");
-        return std::shared_ptr<NamespaceName>();
-    }
+boost::shared_ptr<NamespaceName> NamespaceName::getNamespaceObject() {
+    return boost::shared_ptr<NamespaceName>(this);
 }
 
-NamespaceName::NamespaceName(const std::string& property, const std::string& namespaceName) {
-    std::ostringstream oss;
-    oss << property << "/" << namespaceName;
-    this->namespace_ = oss.str();
-    this->property_ = property;
-    this->localName_ = namespaceName;
-}
-
-bool NamespaceName::validateNamespace(const std::string& property, const std::string& namespaceName) {
-    if (!property.empty() && !namespaceName.empty()) {
-        return NamedEntity::checkName(property) && NamedEntity::checkName(namespaceName);
-    } else {
-        LOG_DEBUG("Empty parameters passed for validating namespace");
-        return false;
-    }
-}
-
-std::shared_ptr<NamespaceName> NamespaceName::getNamespaceObject() {
-    return std::shared_ptr<NamespaceName>(this);
-}
-
-bool NamespaceName::operator==(const NamespaceName& namespaceName) {
+bool NamespaceName::operator ==(const NamespaceName& namespaceName) {
     return this->namespace_.compare(namespaceName.namespace_) == 0;
 }
 
-std::string NamespaceName::getProperty() { return this->property_; }
+std::string NamespaceName::getProperty() {
+    return this->property_;
+}
 
-std::string NamespaceName::getCluster() { return this->cluster_; }
+std::string NamespaceName::getCluster() {
+    return this->cluster_;
+}
 
-std::string NamespaceName::getLocalName() { return this->localName_; }
-
-bool NamespaceName::isV2() { return this->cluster_.empty(); }
-
-std::string NamespaceName::toString() { return this->namespace_; }
-
-}  // namespace pulsar
+std::string NamespaceName::getLocalName() {
+    return this->localName_;
+}

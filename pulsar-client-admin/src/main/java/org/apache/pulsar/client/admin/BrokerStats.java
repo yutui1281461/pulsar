@@ -19,7 +19,6 @@
 package org.apache.pulsar.client.admin;
 
 import org.apache.pulsar.common.stats.AllocatorStats;
-import org.apache.pulsar.policies.data.loadbalancer.LoadManagerReport;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -31,7 +30,7 @@ public interface BrokerStats {
 
     /**
      * Returns Monitoring metrics
-     *
+     * 
      * @return
      * @throws PulsarAdminException
      */
@@ -42,25 +41,23 @@ public interface BrokerStats {
      * Requests JSON string server mbean dump
      * <p>
      * Notes: since we don't plan to introspect the response we avoid converting the response into POJO.
-     *
+     * 
      * @return
      * @throws PulsarAdminException
      */
     JsonArray getMBeans() throws PulsarAdminException;
 
     /**
-     * Returns JSON string topics stats
+     * Returns JSON string destination stats
      * <p>
      * Notes: since we don't plan to introspect the response we avoid converting the response into POJO.
-     *
+     * 
      * @return
      * @throws PulsarAdminException
      */
-    JsonObject getTopics() throws PulsarAdminException;
+    JsonObject getDestinations() throws PulsarAdminException;
 
     JsonObject getPendingBookieOpsStats() throws PulsarAdminException;
 
     AllocatorStats getAllocatorStats(String allocatorName) throws PulsarAdminException;
-
-    LoadManagerReport getLoadReport() throws PulsarAdminException;
 }

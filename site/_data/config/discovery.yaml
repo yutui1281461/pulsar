@@ -21,9 +21,9 @@ configs:
 - name: zookeeperServers
   default: ''
   description: Zookeeper quorum connection string (comma-separated)
-- name: configurationStoreServers
+- name: globalZookeeperServers
   default: ''
-  description: Configuration store connection string (as a comma-separated list)
+  description: Global zookeeper quorum connection string (comma-separated)
 - name: zookeeperSessionTimeoutMs
   default: '30000'
   description: ZooKeeper session timeout

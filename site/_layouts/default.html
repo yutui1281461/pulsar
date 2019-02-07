@@ -42,7 +42,7 @@
         tex2jax: {
           skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
         },
-        "HTML-CSS": { scale: 100 }
+        "HTML-CSS": { scale: 125 }
       });
 
       MathJax.Hub.Queue(function() {
@@ -59,13 +59,5 @@
     {% if jekyll.environment == "production" %}
     {% include google-analytics.html %}
     {% endif %}
-
-    <script type="text/javascript">
-      var navbarOffset = -1 * (document.getElementsByClassName("navbar")[0].offsetHeight);
-      var shiftWindow = function() { scrollBy(0, navbarOffset) };
-      window.addEventListener("hashchange", shiftWindow);
-      window.addEventListener("pageshow", shiftWindow);
-      function load() { if (window.location.hash) shiftWindow(); }
-    </script>
   </body>
 </html>

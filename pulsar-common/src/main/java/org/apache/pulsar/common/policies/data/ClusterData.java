@@ -18,21 +18,13 @@
  */
 package org.apache.pulsar.common.policies.data;
 
-import static com.google.common.base.Preconditions.checkNotNull;
-
-import java.util.LinkedHashSet;
-import java.util.Objects;
-
-import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 
 public class ClusterData {
     private String serviceUrl;
     private String serviceUrlTls;
     private String brokerServiceUrl;
     private String brokerServiceUrlTls;
-    // For given Cluster1(us-west1, us-east1) and Cluster2(us-west2, us-east2)
-    // Peer: [us-west1 -> us-west2] and [us-east1 -> us-east2]
-    private LinkedHashSet<String> peerClusterNames;
 
     public ClusterData() {
     }
@@ -45,20 +37,12 @@ public class ClusterData {
         this.serviceUrl = serviceUrl;
         this.serviceUrlTls = serviceUrlTls;
     }
-
+    
     public ClusterData(String serviceUrl, String serviceUrlTls, String brokerServiceUrl, String brokerServiceUrlTls) {
         this.serviceUrl = serviceUrl;
         this.serviceUrlTls = serviceUrlTls;
         this.brokerServiceUrl = brokerServiceUrl;
         this.brokerServiceUrlTls = brokerServiceUrlTls;
-    }
-
-    public void update(ClusterData other) {
-        checkNotNull(other);
-        this.serviceUrl = other.serviceUrl;
-        this.serviceUrlTls = other.serviceUrlTls;
-        this.brokerServiceUrl = other.brokerServiceUrl;
-        this.brokerServiceUrlTls = other.brokerServiceUrlTls;
     }
 
     public String getServiceUrl() {
@@ -76,7 +60,7 @@ public class ClusterData {
     public void setServiceUrlTls(String serviceUrlTls) {
         this.serviceUrlTls = serviceUrlTls;
     }
-
+    
     public String getBrokerServiceUrl() {
         return brokerServiceUrl;
     }
@@ -93,21 +77,13 @@ public class ClusterData {
         this.brokerServiceUrlTls = brokerServiceUrlTls;
     }
 
-    public LinkedHashSet<String> getPeerClusterNames() {
-        return peerClusterNames;
-    }
-
-    public void setPeerClusterNames(LinkedHashSet<String> peerClusterNames) {
-        this.peerClusterNames = peerClusterNames;
-    }
-
     @Override
     public boolean equals(Object obj) {
         if (obj instanceof ClusterData) {
             ClusterData other = (ClusterData) obj;
-            return Objects.equals(serviceUrl, other.serviceUrl) && Objects.equals(serviceUrlTls, other.serviceUrlTls)
-                    && Objects.equals(brokerServiceUrl, other.brokerServiceUrl)
-                    && Objects.equals(brokerServiceUrlTls, other.brokerServiceUrlTls);
+            return Objects.equal(serviceUrl, other.serviceUrl) && Objects.equal(serviceUrlTls, other.serviceUrlTls)
+                    && Objects.equal(brokerServiceUrl, other.brokerServiceUrl)
+                    && Objects.equal(brokerServiceUrlTls, other.brokerServiceUrlTls);
         }
 
         return false;
@@ -115,14 +91,26 @@ public class ClusterData {
 
     @Override
     public int hashCode() {
-       return Objects.hash(this.toString());
+       return Objects.hashCode(this.toString());
     }
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this).add("serviceUrl", serviceUrl).add("serviceUrlTls", serviceUrlTls)
-                .add("brokerServiceUrl", brokerServiceUrl).add("brokerServiceUrlTls", brokerServiceUrlTls)
-                .add("peerClusterNames", peerClusterNames).toString();
+        StringBuilder str = new StringBuilder();
+        str.append(serviceUrl);
+        if (serviceUrlTls != null && !serviceUrlTls.isEmpty()) {
+            str.append(",");
+            str.append(serviceUrlTls);
+        }
+        if (brokerServiceUrl != null && !brokerServiceUrl.isEmpty()) {
+            str.append(",");
+            str.append(brokerServiceUrl);
+        }
+        if (brokerServiceUrlTls != null && !brokerServiceUrlTls.isEmpty()) {
+            str.append(",");
+            str.append(brokerServiceUrlTls);
+        }
+        return str.toString();
     }
-
+    
 }

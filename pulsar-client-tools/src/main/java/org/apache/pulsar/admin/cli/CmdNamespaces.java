@@ -18,52 +18,40 @@
  */
 package org.apache.pulsar.admin.cli;
 
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
+
+import org.apache.pulsar.admin.cli.utils.IOUtils;
+import org.apache.pulsar.client.admin.PulsarAdmin;
+import org.apache.pulsar.client.admin.PulsarAdminException;
+import org.apache.pulsar.common.policies.data.BacklogQuota;
+import org.apache.pulsar.common.policies.data.PersistencePolicies;
+import org.apache.pulsar.common.policies.data.RetentionPolicies;
+
 import com.beust.jcommander.Parameter;
 import com.beust.jcommander.ParameterException;
 import com.beust.jcommander.Parameters;
 import com.beust.jcommander.converters.CommaParameterSplitter;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-
-import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.TimeUnit;
-
-import org.apache.pulsar.admin.cli.utils.IOUtils;
-import org.apache.pulsar.client.admin.PulsarAdmin;
-import org.apache.pulsar.client.admin.PulsarAdminException;
-import org.apache.pulsar.common.naming.NamespaceName;
-import org.apache.pulsar.common.policies.data.BacklogQuota;
-import org.apache.pulsar.common.policies.data.BundlesData;
-import org.apache.pulsar.common.policies.data.DispatchRate;
-import org.apache.pulsar.common.policies.data.PersistencePolicies;
-import org.apache.pulsar.common.policies.data.Policies;
-import org.apache.pulsar.common.policies.data.RetentionPolicies;
-import org.apache.pulsar.common.policies.data.SchemaAutoUpdateCompatibilityStrategy;
-import org.apache.pulsar.common.policies.data.SubscribeRate;
-import org.apache.pulsar.common.policies.data.SubscriptionAuthMode;
-import org.apache.pulsar.common.util.RelativeTimeUtil;
 
 @Parameters(commandDescription = "Operations about namespaces")
 public class CmdNamespaces extends CmdBase {
-    @Parameters(commandDescription = "Get the namespaces for a tenant")
+    @Parameters(commandDescription = "Get the namespaces for a property")
     private class GetNamespacesPerProperty extends CliCommand {
-        @Parameter(description = "tenant-name\n", required = true)
+        @Parameter(description = "property-name\n", required = true)
         private java.util.List<String> params;
 
         @Override
         void run() throws PulsarAdminException {
-            String tenant = getOneArgument(params);
-            print(admin.namespaces().getNamespaces(tenant));
+            String property = getOneArgument(params);
+            print(admin.namespaces().getNamespaces(property));
         }
     }
 
-    @Parameters(commandDescription = "Get the namespaces for a tenant in a cluster", hidden = true)
+    @Parameters(commandDescription = "Get the namespaces for a property in a cluster")
     private class GetNamespacesPerCluster extends CliCommand {
-        @Parameter(description = "tenant/cluster\n", required = true)
+        @Parameter(description = "property/cluster\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -73,33 +61,21 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Get the list of topics for a namespace")
-    private class GetTopics extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getTopics(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Get the list of destinations for a namespace", hidden = true)
+    @Parameters(commandDescription = "Get the destinations for a namespace")
     private class GetDestinations extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
         void run() throws PulsarAdminException {
             String namespace = validateNamespace(params);
-            print(admin.namespaces().getTopics(namespace));
+            print(admin.namespaces().getDestinations(namespace));
         }
     }
 
-    @Parameters(commandDescription = "Get the configuration policies of a namespace")
+    @Parameters(commandDescription = "Get the policies of a namspace")
     private class GetPolicies extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -111,11 +87,8 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Creates a new namespace")
     private class Create extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
-
-        @Parameter(names = { "--clusters", "-c" }, description = "List of clusters this namespace will be assigned", required = false)
-        private java.util.List<String> clusters;
 
         @Parameter(names = { "--bundles", "-b" }, description = "number of bundles to activate", required = false)
         private int numBundles = 0;
@@ -129,34 +102,17 @@ public class CmdNamespaces extends CmdBase {
                 throw new ParameterException(
                         "Invalid number of bundles. Number of numbles has to be in the range of (0, 2^32].");
             }
-
-            NamespaceName namespaceName = NamespaceName.get(namespace);
-            if (namespaceName.isV2()) {
-                Policies policies = new Policies();
-                policies.bundles = numBundles > 0 ? new BundlesData(numBundles) : null;
-
-                if (clusters != null) {
-                    policies.replication_clusters = new HashSet<>(clusters);
-                }
-
-                admin.namespaces().createNamespace(namespace, policies);
+            if (numBundles == 0) {
+                admin.namespaces().createNamespace(namespace);
             } else {
-                if (numBundles == 0) {
-                    admin.namespaces().createNamespace(namespace);
-                } else {
-                    admin.namespaces().createNamespace(namespace, numBundles);
-                }
-
-                if (clusters != null && !clusters.isEmpty()) {
-                    admin.namespaces().setNamespaceReplicationClusters(namespace, new HashSet<>(clusters));
-                }
+                admin.namespaces().createNamespace(namespace, numBundles);
             }
         }
     }
 
     @Parameters(commandDescription = "Deletes a namespace. The namespace needs to be empty")
     private class Delete extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -166,9 +122,9 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Grant permissions on a namespace")
+    @Parameters(commandDescription = "Grant permissions on a namspace")
     private class GrantPermissions extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = "--role", description = "Client role to which grant permissions", required = true)
@@ -184,9 +140,9 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Revoke permissions on a namespace")
+    @Parameters(commandDescription = "Revoke permissions on a namspace")
     private class RevokePermissions extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = "--role", description = "Client role to which revoke permissions", required = true)
@@ -199,45 +155,9 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Grant permissions to access subscription admin-api")
-    private class GrantSubscriptionPermissions extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = "--subscription", description = "Subscription name for which permission will be granted to roles", required = true)
-        private String subscription;
-
-        @Parameter(names = "--roles", description = "Client roles to which grant permissions (comma separated roles)", required = true, splitter = CommaParameterSplitter.class)
-        private List<String> roles;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().grantPermissionOnSubscription(namespace, subscription, Sets.newHashSet(roles));
-        }
-    }
-
-    @Parameters(commandDescription = "Revoke permissions on a namespace")
-    private class RevokeSubscriptionPermissions extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = "--subscription", description = "Subscription name for which permission will be granted to roles", required = true)
-        private String subscription;
-        
-        @Parameter(names = "--role", description = "Client role to which revoke permissions", required = true)
-        private String role;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().revokePermissionOnSubscription(namespace, subscription, role);
-        }
-    }
-    
-    @Parameters(commandDescription = "Get the permissions on a namespace")
+    @Parameters(commandDescription = "Get the permissions on a namspace")
     private class Permissions extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -247,9 +167,9 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Set replication clusters for a namespace")
+    @Parameters(commandDescription = "Set replication clusters for a namspace")
     private class SetReplicationClusters extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "--clusters",
@@ -260,13 +180,13 @@ public class CmdNamespaces extends CmdBase {
         void run() throws PulsarAdminException {
             String namespace = validateNamespace(params);
             List<String> clusters = Lists.newArrayList(clusterIds.split(","));
-            admin.namespaces().setNamespaceReplicationClusters(namespace, Sets.newHashSet(clusters));
+            admin.namespaces().setNamespaceReplicationClusters(namespace, clusters);
         }
     }
 
-    @Parameters(commandDescription = "Get replication clusters for a namespace")
+    @Parameters(commandDescription = "Get replication clusters for a namspace")
     private class GetReplicationClusters extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -276,9 +196,9 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Set Message TTL for a namespace")
+    @Parameters(commandDescription = "Set Message TTL for a namspace")
     private class SetMessageTTL extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "--messageTTL", "-ttl" }, description = "Message TTL in seconds", required = true)
@@ -291,127 +211,33 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Set Anti-affinity group name for a namespace")
-    private class SetAntiAffinityGroup extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--group", "-g" }, description = "Anti-affinity group name", required = true)
-        private String antiAffinityGroup;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setNamespaceAntiAffinityGroup(namespace, antiAffinityGroup);
-        }
-    }
-
-    @Parameters(commandDescription = "Get Anti-affinity group name for a namespace")
-    private class GetAntiAffinityGroup extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getNamespaceAntiAffinityGroup(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Get Anti-affinity namespaces grouped with the given anti-affinity group name")
-    private class GetAntiAffinityNamespaces extends CliCommand {
-
-        @Parameter(names = { "--tenant",
-                "-p" }, description = "tenant is only used for authorization. Client has to be admin of any of the tenant to access this api", required = false)
-        private String tenant;
-
-        @Parameter(names = { "--cluster", "-c" }, description = "Cluster name", required = true)
-        private String cluster;
-
-        @Parameter(names = { "--group", "-g" }, description = "Anti-affinity group name", required = true)
-        private String antiAffinityGroup;
-
-        @Override
-        void run() throws PulsarAdminException {
-            print(admin.namespaces().getAntiAffinityNamespaces(tenant, cluster, antiAffinityGroup));
-        }
-    }
-
-    @Parameters(commandDescription = "Remove Anti-affinity group name for a namespace")
-    private class DeleteAntiAffinityGroup extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().deleteNamespaceAntiAffinityGroup(namespace);
-        }
-    }
-
-
-    @Parameters(commandDescription = "Enable or disable deduplication for a namespace")
-    private class SetDeduplication extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--enable", "-e" }, description = "Enable deduplication")
-        private boolean enable = false;
-
-        @Parameter(names = { "--disable", "-d" }, description = "Disable deduplication")
-        private boolean disable = false;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-
-            if (enable == disable) {
-                throw new ParameterException("Need to specify either --enable or --disable");
-            }
-            admin.namespaces().setDeduplicationStatus(namespace, enable);
-        }
-    }
-
     @Parameters(commandDescription = "Set the retention policy for a namespace")
     private class SetRetention extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "--time",
-                "-t" }, description = "Retention time in minutes (or minutes, hours,days,weeks eg: 100m, 3h, 2d, 5w). "
-                        + "0 means no retention and -1 means infinite time retention", required = true)
+                "-t" }, description = "Retention time in minutes (or minutes, hours,days,weeks eg: 100m, 3h, 2d, 5w)", required = true)
         private String retentionTimeStr;
 
-        @Parameter(names = { "--size", "-s" }, description = "Retention size limit (eg: 10M, 16G, 3T). "
-                + "0 or less than 1MB means no retention and -1 means infinite size retention", required = true)
+        @Parameter(names = { "--size", "-s" }, description = "Retention size limit (eg: 10M, 16G)", required = true)
         private String limitStr;
 
         @Override
         void run() throws PulsarAdminException {
             String namespace = validateNamespace(params);
             long sizeLimit = validateSizeString(limitStr);
-            long retentionTimeInSec = RelativeTimeUtil.parseRelativeTimeInSeconds(retentionTimeStr);
+            int retentionTimeInMin = validateTimeString(retentionTimeStr);
 
-            final int retentionTimeInMin;
-            if (retentionTimeInSec != -1) {
-                retentionTimeInMin = (int) TimeUnit.SECONDS.toMinutes(retentionTimeInSec);
-            } else {
-                retentionTimeInMin = -1;
-            }
-
-            final int retentionSizeInMB;
-            if (sizeLimit != -1) {
-                retentionSizeInMB = (int) (sizeLimit / (1024 * 1024));
-            } else {
-                retentionSizeInMB = -1;
-            }
+            sizeLimit = sizeLimit / (1024 * 1024);
+            int retentionSizeInMB = (int) sizeLimit;
             admin.namespaces().setRetention(namespace, new RetentionPolicies(retentionTimeInMin, retentionSizeInMB));
         }
     }
 
     @Parameters(commandDescription = "Get the retention policy for a namespace")
     private class GetRetention extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -421,9 +247,9 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Get message TTL for a namespace")
+    @Parameters(commandDescription = "Get message TTL for a namspace")
     private class GetMessageTTL extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -435,7 +261,7 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Unload a namespace from the current serving broker")
     private class Unload extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "--bundle", "-b" }, description = "{start-boundary}_{end-boundary}\n")
@@ -454,135 +280,22 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Split a namespace-bundle from the current serving broker")
     private class SplitBundle extends CliCommand {
-        @Parameter(description = "tenant/namespace/\n", required = true)
+        @Parameter(description = "property/cluster/namespace/\n", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "--bundle", "-b" }, description = "{start-boundary}_{end-boundary}\n", required = true)
         private String bundle;
 
-        @Parameter(names = { "--unload",
-                "-u" }, description = "Unload newly split bundles after splitting old bundle", required = false)
-        private boolean unload;
-
         @Override
         void run() throws PulsarAdminException {
             String namespace = validateNamespace(params);
-            admin.namespaces().splitNamespaceBundle(namespace, bundle, unload);
-        }
-    }
-
-    @Parameters(commandDescription = "Set message-dispatch-rate for all topics of the namespace")
-    private class SetDispatchRate extends CliCommand {
-        @Parameter(description = "tenant/namespace/\n", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--msg-dispatch-rate",
-                "-md" }, description = "message-dispatch-rate (default -1 will be overwrite if not passed)\n", required = false)
-        private int msgDispatchRate = -1;
-
-        @Parameter(names = { "--byte-dispatch-rate",
-                "-bd" }, description = "byte-dispatch-rate (default -1 will be overwrite if not passed)\n", required = false)
-        private long byteDispatchRate = -1;
-
-        @Parameter(names = { "--dispatch-rate-period",
-                "-dt" }, description = "dispatch-rate-period in second type (default 1 second will be overwrite if not passed)\n", required = false)
-        private int dispatchRatePeriodSec = 1;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setDispatchRate(namespace,
-                    new DispatchRate(msgDispatchRate, byteDispatchRate, dispatchRatePeriodSec));
-        }
-    }
-
-    @Parameters(commandDescription = "Get configured message-dispatch-rate for all topics of the namespace (Disabled if value < 0)")
-    private class GetDispatchRate extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getDispatchRate(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Set subscribe-rate per consumer for all topics of the namespace")
-    private class SetSubscribeRate extends CliCommand {
-
-        @Parameter(description = "tenant/namespace/\n", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--subscribe-rate",
-                "-sr" }, description = "subscribe-rate (default -1 will be overwrite if not passed)\n", required = false)
-        private int subscribeRate = -1;
-
-        @Parameter(names = { "--subscribe-rate-period",
-                "-st" }, description = "subscribe-rate-period in second type (default 30 second will be overwrite if not passed)\n", required = false)
-        private int subscribeRatePeriodSec = 30;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setSubscribeRate(namespace,
-                    new SubscribeRate(subscribeRate, subscribeRatePeriodSec));
-        }
-    }
-
-    @Parameters(commandDescription = "Get configured subscribe-rate per consumer for all topics of the namespace")
-    private class GetSubscribeRate extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getSubscribeRate(namespace));
-        }
-    }
-
-
-    @Parameters(commandDescription = "Set subscription message-dispatch-rate for all subscription of the namespace")
-    private class SetSuscriptionDispatchRate extends CliCommand {
-        @Parameter(description = "tenant/namespace/\n", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--sub-msg-dispatch-rate",
-            "-md" }, description = "message-dispatch-rate (default -1 will be overwrite if not passed)\n", required = false)
-        private int msgDispatchRate = -1;
-
-        @Parameter(names = { "--byte-dispatch-rate",
-            "-bd" }, description = "byte-dispatch-rate (default -1 will be overwrite if not passed)\n", required = false)
-        private long byteDispatchRate = -1;
-
-        @Parameter(names = { "--dispatch-rate-period",
-            "-dt" }, description = "dispatch-rate-period in second type (default 1 second will be overwrite if not passed)\n", required = false)
-        private int dispatchRatePeriodSec = 1;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setSubscriptionDispatchRate(namespace,
-                new DispatchRate(msgDispatchRate, byteDispatchRate, dispatchRatePeriodSec));
-        }
-    }
-
-    @Parameters(commandDescription = "Get subscription configured message-dispatch-rate for all topics of the namespace (Disabled if value < 0)")
-    private class GetSubscriptionDispatchRate extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getSubscriptionDispatchRate(namespace));
+            admin.namespaces().splitNamespaceBundle(namespace, bundle);
         }
     }
 
     @Parameters(commandDescription = "Get the backlog quota policies for a namespace")
     private class GetBacklogQuotaMap extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -594,7 +307,7 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Set a backlog quota policy for a namespace")
     private class SetBacklogQuota extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "-l", "--limit" }, description = "Size limit (eg: 10M, 16G)", required = true)
@@ -625,7 +338,7 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Remove a backlog quota policy from a namespace")
     private class RemoveBacklogQuota extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -637,7 +350,7 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Get the persistence policies for a namespace")
     private class GetPersistence extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
+        @Parameter(description = "property/cluster/namespace\n", required = true)
         private java.util.List<String> params;
 
         @Override
@@ -649,7 +362,7 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Set the persistence policies for a namespace")
     private class SetPersistence extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "-e",
@@ -678,7 +391,7 @@ public class CmdNamespaces extends CmdBase {
 
     @Parameters(commandDescription = "Clear backlog for a namespace")
     private class ClearBacklog extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "-s", "--sub" }, description = "subscription name")
@@ -712,9 +425,9 @@ public class CmdNamespaces extends CmdBase {
         }
     }
 
-    @Parameters(commandDescription = "Unsubscribe the given subscription on all topics on a namespace")
+    @Parameters(commandDescription = "Unsubscribe the given subscription on all destinations on a namespace")
     private class Unsubscribe extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
+        @Parameter(description = "property/cluster/namespace", required = true)
         private java.util.List<String> params;
 
         @Parameter(names = { "-s", "--sub" }, description = "subscription name", required = true)
@@ -735,278 +448,49 @@ public class CmdNamespaces extends CmdBase {
 
     }
 
-    @Parameters(commandDescription = "Enable or disable message encryption required for a namespace")
-    private class SetEncryptionRequired extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
+    private static long validateSizeString(String s) {
+        char last = s.charAt(s.length() - 1);
+        String subStr = s.substring(0, s.length() - 1);
+        switch (last) {
+        case 'k':
+        case 'K':
+            return Long.parseLong(subStr) * 1024;
 
-        @Parameter(names = { "--enable", "-e" }, description = "Enable message encryption required")
-        private boolean enable = false;
+        case 'm':
+        case 'M':
+            return Long.parseLong(subStr) * 1024 * 1024;
 
-        @Parameter(names = { "--disable", "-d" }, description = "Disable message encryption required")
-        private boolean disable = false;
+        case 'g':
+        case 'G':
+            return Long.parseLong(subStr) * 1024 * 1024 * 1024;
 
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-
-            if (enable == disable) {
-                throw new ParameterException("Need to specify either --enable or --disable");
-            }
-            admin.namespaces().setEncryptionRequiredStatus(namespace, enable);
+        default:
+            return Long.parseLong(s);
         }
     }
 
-    @Parameters(commandDescription = "Set subscription auth mode on a namespace")
-    private class SetSubscriptionAuthMode extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
+    private static int validateTimeString(String s) {
+        char last = s.charAt(s.length() - 1);
+        String subStr = s.substring(0, s.length() - 1);
+        switch (last) {
+        case 'm':
+        case 'M':
+            return Integer.parseInt(subStr);
 
-        @Parameter(names = { "-m", "--subscription-auth-mode" }, description = "subscription name", required = true)
-        private String mode;
+        case 'h':
+        case 'H':
+            return Integer.parseInt(subStr) * 60;
 
-        @Override
-        void run() throws Exception {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setSubscriptionAuthMode(namespace, SubscriptionAuthMode.valueOf(mode));
-        }
-    }
+        case 'd':
+        case 'D':
+            return Integer.parseInt(subStr) * 24 * 60;
 
-    @Parameters(commandDescription = "Get maxProducersPerTopic for a namespace")
-    private class GetMaxProducersPerTopic extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
+        case 'w':
+        case 'W':
+            return Integer.parseInt(subStr) * 7 * 24 * 60;
 
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getMaxProducersPerTopic(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Set maxProducersPerTopic for a namespace")
-    private class SetMaxProducersPerTopic extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--max-producers-per-topic", "-p" }, description = "maxProducersPerTopic for a namespace", required = true)
-        private int maxProducersPerTopic;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setMaxProducersPerTopic(namespace, maxProducersPerTopic);
-        }
-    }
-
-    @Parameters(commandDescription = "Get maxConsumersPerTopic for a namespace")
-    private class GetMaxConsumersPerTopic extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getMaxConsumersPerTopic(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Set maxConsumersPerTopic for a namespace")
-    private class SetMaxConsumersPerTopic extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--max-consumers-per-topic", "-c" }, description = "maxConsumersPerTopic for a namespace", required = true)
-        private int maxConsumersPerTopic;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setMaxConsumersPerTopic(namespace, maxConsumersPerTopic);
-        }
-    }
-
-    @Parameters(commandDescription = "Get maxConsumersPerSubscription for a namespace")
-    private class GetMaxConsumersPerSubscription extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getMaxConsumersPerSubscription(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Set maxConsumersPerSubscription for a namespace")
-    private class SetMaxConsumersPerSubscription extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--max-consumers-per-subscription", "-c" }, description = "maxConsumersPerSubscription for a namespace", required = true)
-        private int maxConsumersPerSubscription;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setMaxConsumersPerSubscription(namespace, maxConsumersPerSubscription);
-        }
-    }
-
-    @Parameters(commandDescription = "Get compactionThreshold for a namespace")
-    private class GetCompactionThreshold extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getCompactionThreshold(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Set compactionThreshold for a namespace")
-    private class SetCompactionThreshold extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--threshold", "-t" },
-                   description = "Maximum number of bytes in a topic backlog before compaction is triggered "
-                                 + "(eg: 10M, 16G, 3T). 0 disables automatic compaction",
-                   required = true)
-        private String threshold = "0";
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setCompactionThreshold(namespace, validateSizeString(threshold));
-        }
-    }
-
-    @Parameters(commandDescription = "Get offloadThreshold for a namespace")
-    private class GetOffloadThreshold extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            print(admin.namespaces().getOffloadThreshold(namespace));
-        }
-    }
-
-    @Parameters(commandDescription = "Set offloadThreshold for a namespace")
-    private class SetOffloadThreshold extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--size", "-s" },
-                   description = "Maximum number of bytes stored in the pulsar cluster for a topic before data will"
-                                 + " start being automatically offloaded to longterm storage (eg: 10M, 16G, 3T, 100)."
-                                 + " Negative values disable automatic offload."
-                                 + " 0 triggers offloading as soon as possible.",
-                   required = true)
-        private String threshold = "-1";
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setOffloadThreshold(namespace, validateSizeString(threshold));
-        }
-    }
-
-    @Parameters(commandDescription = "Get offloadDeletionLag, in minutes, for a namespace")
-    private class GetOffloadDeletionLag extends CliCommand {
-        @Parameter(description = "tenant/namespace\n", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            Long lag = admin.namespaces().getOffloadDeleteLagMs(namespace);
-            if (lag != null) {
-                System.out.println(TimeUnit.MINUTES.convert(lag, TimeUnit.MILLISECONDS) + " minute(s)");
-            } else {
-                System.out.println("Unset for namespace. Defaulting to broker setting.");
-            }
-        }
-    }
-
-    @Parameters(commandDescription = "Set offloadDeletionLag for a namespace")
-    private class SetOffloadDeletionLag extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--lag", "-l" },
-                   description = "Duration to wait after offloading a ledger segment, before deleting the copy of that"
-                                  + " segment from cluster local storage. (eg: 10m, 5h, 3d, 2w).",
-                   required = true)
-        private String lag = "-1";
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().setOffloadDeleteLag(namespace, RelativeTimeUtil.parseRelativeTimeInSeconds(lag),
-                    TimeUnit.SECONDS);
-        }
-    }
-
-    @Parameters(commandDescription = "Clear offloadDeletionLag for a namespace")
-    private class ClearOffloadDeletionLag extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            admin.namespaces().clearOffloadDeleteLag(namespace);
-        }
-    }
-
-    @Parameters(commandDescription = "Get the schema auto-update strategy for a namespace")
-    private class GetSchemaAutoUpdateStrategy extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-            System.out.println(admin.namespaces().getSchemaAutoUpdateCompatibilityStrategy(namespace)
-                               .toString().toUpperCase());
-        }
-    }
-
-    @Parameters(commandDescription = "Set the schema auto-update strategy for a namespace")
-    private class SetSchemaAutoUpdateStrategy extends CliCommand {
-        @Parameter(description = "tenant/namespace", required = true)
-        private java.util.List<String> params;
-
-        @Parameter(names = { "--compatibility", "-c" },
-                   description = "Compatibility level required for new schemas created via a Producer. "
-                                 + "Possible values (Full, Backward, Forward).")
-        private String strategyParam = null;
-
-        @Parameter(names = { "--disabled" }, description = "Disable automatic schema updates")
-        private boolean disabled = false;
-
-        @Override
-        void run() throws PulsarAdminException {
-            String namespace = validateNamespace(params);
-
-            SchemaAutoUpdateCompatibilityStrategy strategy = null;
-            String strategyStr = strategyParam != null ? strategyParam.toUpperCase() : "";
-            if (disabled) {
-                strategy = SchemaAutoUpdateCompatibilityStrategy.AutoUpdateDisabled;
-            } else if (strategyStr.equals("FULL")) {
-                strategy = SchemaAutoUpdateCompatibilityStrategy.Full;
-            } else if (strategyStr.equals("BACKWARD")) {
-                strategy = SchemaAutoUpdateCompatibilityStrategy.Backward;
-            } else if (strategyStr.equals("FORWARD")) {
-                strategy = SchemaAutoUpdateCompatibilityStrategy.Forward;
-            } else {
-                throw new PulsarAdminException("Either --compatibility or --disabled must be specified");
-            }
-            admin.namespaces().setSchemaAutoUpdateCompatibilityStrategy(namespace, strategy);
+        default:
+            return Integer.parseInt(s);
         }
     }
 
@@ -1014,8 +498,6 @@ public class CmdNamespaces extends CmdBase {
         super("namespaces", admin);
         jcommander.addCommand("list", new GetNamespacesPerProperty());
         jcommander.addCommand("list-cluster", new GetNamespacesPerCluster());
-
-        jcommander.addCommand("topics", new GetTopics());
         jcommander.addCommand("destinations", new GetDestinations());
         jcommander.addCommand("policies", new GetPolicies());
         jcommander.addCommand("create", new Create());
@@ -1024,10 +506,7 @@ public class CmdNamespaces extends CmdBase {
         jcommander.addCommand("permissions", new Permissions());
         jcommander.addCommand("grant-permission", new GrantPermissions());
         jcommander.addCommand("revoke-permission", new RevokePermissions());
-        
-        jcommander.addCommand("grant-subscription-permission", new GrantSubscriptionPermissions());
-        jcommander.addCommand("revoke-subscription-permission", new RevokeSubscriptionPermissions());
-        
+
         jcommander.addCommand("set-clusters", new SetReplicationClusters());
         jcommander.addCommand("get-clusters", new GetReplicationClusters());
 
@@ -1041,13 +520,6 @@ public class CmdNamespaces extends CmdBase {
         jcommander.addCommand("get-message-ttl", new GetMessageTTL());
         jcommander.addCommand("set-message-ttl", new SetMessageTTL());
 
-        jcommander.addCommand("get-anti-affinity-group", new GetAntiAffinityGroup());
-        jcommander.addCommand("set-anti-affinity-group", new SetAntiAffinityGroup());
-        jcommander.addCommand("get-anti-affinity-namespaces", new GetAntiAffinityNamespaces());
-        jcommander.addCommand("delete-anti-affinity-group", new DeleteAntiAffinityGroup());
-
-        jcommander.addCommand("set-deduplication", new SetDeduplication());
-
         jcommander.addCommand("get-retention", new GetRetention());
         jcommander.addCommand("set-retention", new SetRetention());
 
@@ -1055,37 +527,8 @@ public class CmdNamespaces extends CmdBase {
 
         jcommander.addCommand("split-bundle", new SplitBundle());
 
-        jcommander.addCommand("set-dispatch-rate", new SetDispatchRate());
-        jcommander.addCommand("get-dispatch-rate", new GetDispatchRate());
-
-        jcommander.addCommand("set-subscribe-rate", new SetSubscribeRate());
-        jcommander.addCommand("get-subscribe-rate", new GetSubscribeRate());
-
         jcommander.addCommand("clear-backlog", new ClearBacklog());
 
         jcommander.addCommand("unsubscribe", new Unsubscribe());
-
-        jcommander.addCommand("set-encryption-required", new SetEncryptionRequired());
-        jcommander.addCommand("set-subscription-auth-mode", new SetSubscriptionAuthMode());
-
-        jcommander.addCommand("get-max-producers-per-topic", new GetMaxProducersPerTopic());
-        jcommander.addCommand("set-max-producers-per-topic", new SetMaxProducersPerTopic());
-        jcommander.addCommand("get-max-consumers-per-topic", new GetMaxConsumersPerTopic());
-        jcommander.addCommand("set-max-consumers-per-topic", new SetMaxConsumersPerTopic());
-        jcommander.addCommand("get-max-consumers-per-subscription", new GetMaxConsumersPerSubscription());
-        jcommander.addCommand("set-max-consumers-per-subscription", new SetMaxConsumersPerSubscription());
-
-        jcommander.addCommand("get-compaction-threshold", new GetCompactionThreshold());
-        jcommander.addCommand("set-compaction-threshold", new SetCompactionThreshold());
-
-        jcommander.addCommand("get-offload-threshold", new GetOffloadThreshold());
-        jcommander.addCommand("set-offload-threshold", new SetOffloadThreshold());
-
-        jcommander.addCommand("get-offload-deletion-lag", new GetOffloadDeletionLag());
-        jcommander.addCommand("set-offload-deletion-lag", new SetOffloadDeletionLag());
-        jcommander.addCommand("clear-offload-deletion-lag", new ClearOffloadDeletionLag());
-
-        jcommander.addCommand("get-schema-autoupdate-strategy", new GetSchemaAutoUpdateStrategy());
-        jcommander.addCommand("set-schema-autoupdate-strategy", new SetSchemaAutoUpdateStrategy());
     }
 }

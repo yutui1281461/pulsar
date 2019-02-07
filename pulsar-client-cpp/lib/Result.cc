@@ -119,18 +119,6 @@ const char* pulsar::strResult(Result result) {
 
         case ResultUnsupportedVersionError:
             return "UnsupportedVersionError";
-
-        case ResultTopicTerminated:
-            return "TopicTerminated";
-
-        case ResultCryptoError:
-            return "CryptoError";
-
-        case ResultProducerBusy:
-            return "ProducerBusy";
-
-        case ResultIncompatibleSchema:
-            return "IncompatibleSchema";
     };
     // NOTE : Do not add default case in the switch above. In future if we get new cases for
     // ServerError and miss them in the switch above we would like to get notified. Adding
@@ -140,6 +128,8 @@ const char* pulsar::strResult(Result result) {
 
 #pragma GCC visibility push(default)
 
-std::ostream& operator<<(std::ostream& s, Result result) { return s << strResult(result); }
+std::ostream& operator<<(std::ostream& s, Result result) {
+    return s << strResult(result);
+}
 
 #pragma GCC visibility pop

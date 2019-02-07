@@ -24,23 +24,24 @@ import static com.google.common.base.Preconditions.checkNotNull;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.collect.Lists;
+
+import io.netty.util.concurrent.DefaultThreadFactory;
 
 public class ExecutorProvider {
     private final int numThreads;
     private final List<ExecutorService> executors;
     private final AtomicInteger currentThread = new AtomicInteger(0);
 
-    public ExecutorProvider(int numThreads, ThreadFactory threadFactory) {
+    public ExecutorProvider(int numThreads, String threadNamePrefix) {
         checkArgument(numThreads > 0);
         this.numThreads = numThreads;
-        checkNotNull(threadFactory);
+        checkNotNull(threadNamePrefix);
         executors = Lists.newArrayListWithCapacity(numThreads);
         for (int i = 0; i < numThreads; i++) {
-            executors.add(Executors.newSingleThreadScheduledExecutor(threadFactory));
+            executors.add(Executors.newSingleThreadExecutor(new DefaultThreadFactory(threadNamePrefix)));
         }
     }
 

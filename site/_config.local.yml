@@ -18,4 +18,8 @@
 #
 
 destination: generated
-baseurl: ""
+livereload: true
+baseurl: "/"
+current_version: 1.18
+include:
+- docs/example.md

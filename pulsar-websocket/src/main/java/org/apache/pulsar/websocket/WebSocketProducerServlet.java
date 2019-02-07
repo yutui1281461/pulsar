@@ -25,7 +25,6 @@ public class WebSocketProducerServlet extends WebSocketServlet {
     private static final long serialVersionUID = 1L;
 
     public static final String SERVLET_PATH = "/ws/producer";
-    public static final String SERVLET_PATH_V2 = "/ws/v2/producer";
 
     private final WebSocketService service;
 
@@ -36,9 +35,6 @@ public class WebSocketProducerServlet extends WebSocketServlet {
     @Override
     public void configure(WebSocketServletFactory factory) {
         factory.getPolicy().setMaxTextMessageSize(WebSocketService.MaxTextFrameSize);
-        if (service.getConfig().getWebSocketSessionIdleTimeoutMillis() > 0) {
-            factory.getPolicy().setIdleTimeout(service.getConfig().getWebSocketSessionIdleTimeoutMillis());
-        }
-        factory.setCreator((request, response) -> new ProducerHandler(service, request.getHttpServletRequest(), response));
+        factory.setCreator((req, resp) -> new ProducerHandler(service, req.getHttpServletRequest()));
     }
 }

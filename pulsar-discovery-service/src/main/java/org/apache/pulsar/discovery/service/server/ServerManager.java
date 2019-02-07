@@ -22,8 +22,10 @@ import java.net.URI;
 import java.security.GeneralSecurityException;
 import java.util.List;
 import java.util.Map;
-import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import javax.net.ssl.SSLContext;
 import javax.servlet.Servlet;
 
 import org.apache.pulsar.common.util.SecurityUtility;
@@ -45,42 +47,43 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.collect.Lists;
 
+import io.netty.util.concurrent.DefaultThreadFactory;
+
 /**
  * Manages web-service startup/stop on jetty server.
  *
  */
 public class ServerManager {
     private final Server server;
-    private final ExecutorThreadPool webServiceExecutor;
+    private final ExecutorService webServiceExecutor;
     private final List<Handler> handlers = Lists.newArrayList();
+    protected final int externalServicePort;
 
     public ServerManager(ServiceConfig config) {
-        this.webServiceExecutor = new ExecutorThreadPool();
-        this.webServiceExecutor.setName("pulsar-external-web");
-        this.server = new Server(webServiceExecutor);
+        this.webServiceExecutor = Executors.newFixedThreadPool(32, new DefaultThreadFactory("pulsar-external-web"));
+        this.server = new Server(new ExecutorThreadPool(webServiceExecutor));
+        this.externalServicePort = config.getWebServicePort();
 
         List<ServerConnector> connectors = Lists.newArrayList();
 
-        if (config.getWebServicePort().isPresent()) {
-            ServerConnector connector = new ServerConnector(server, 1, 1);
-            connector.setPort(config.getWebServicePort().get());
-            connectors.add(connector);
-        }
+        ServerConnector connector = new ServerConnector(server, 1, 1);
+        connector.setPort(externalServicePort);
+        connectors.add(connector);
 
-        if (config.getWebServicePortTls().isPresent()) {
+        if (config.isTlsEnabled()) {
+            SslContextFactory sslCtxFactory = new SslContextFactory();
             try {
-                SslContextFactory sslCtxFactory = SecurityUtility.createSslContextFactory(
-                        config.isTlsAllowInsecureConnection(),
-                        config.getTlsTrustCertsFilePath(),
-                        config.getTlsCertificateFilePath(),
-                        config.getTlsKeyFilePath(), 
-                        config.getTlsRequireTrustedClientCertOnConnect());
-                ServerConnector tlsConnector = new ServerConnector(server, 1, 1, sslCtxFactory);
-                tlsConnector.setPort(config.getWebServicePortTls().get());
-                connectors.add(tlsConnector);
+                SSLContext sslCtx = SecurityUtility.createSslContext(config.isTlsAllowInsecureConnection(), config.getTlsTrustCertsFilePath(), config.getTlsCertificateFilePath(),
+                        config.getTlsKeyFilePath());
+                sslCtxFactory.setSslContext(sslCtx);
             } catch (GeneralSecurityException e) {
                 throw new RestException(e);
-            }            
+            }
+
+            sslCtxFactory.setWantClientAuth(true);
+            ServerConnector tlsConnector = new ServerConnector(server, 1, 1, sslCtxFactory);
+            tlsConnector.setPort(config.getWebServicePortTls());
+            connectors.add(tlsConnector);
         }
 
         // Limit number of concurrent HTTP connections to avoid getting out of file descriptors
@@ -102,11 +105,15 @@ public class ServerManager {
         handlers.add(context);
     }
 
+    public int getExternalServicePort() {
+        return externalServicePort;
+    }
+
     public void start() throws Exception {
         RequestLogHandler requestLogHandler = new RequestLogHandler();
         Slf4jRequestLog requestLog = new Slf4jRequestLog();
         requestLog.setExtended(true);
-        requestLog.setLogTimeZone(TimeZone.getDefault().getID());
+        requestLog.setLogTimeZone("GMT");
         requestLog.setLogLatency(true);
         requestLogHandler.setRequestLog(requestLog);
         handlers.add(0, new ContextHandlerCollection());
@@ -126,7 +133,7 @@ public class ServerManager {
 
     public void stop() throws Exception {
         server.stop();
-        webServiceExecutor.stop();
+        webServiceExecutor.shutdown();
         log.info("Server stopped successfully");
     }
     

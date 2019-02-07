@@ -18,95 +18,14 @@
  */
 #include "utils.h"
 
-AuthenticationWrapper::AuthenticationWrapper() {}
-
 AuthenticationWrapper::AuthenticationWrapper(const std::string& dynamicLibPath,
                                              const std::string& authParamsString) {
     this->auth = AuthFactory::create(dynamicLibPath, authParamsString);
 }
 
-struct AuthenticationTlsWrapper : public AuthenticationWrapper {
-    AuthenticationTlsWrapper(const std::string& certificatePath, const std::string& privateKeyPath) :
-            AuthenticationWrapper() {
-        this->auth = AuthTls::create(certificatePath, privateKeyPath);
-    }
-};
-
-struct TokenSupplierWrapper {
-    PyObject* _pySupplier;
-
-    TokenSupplierWrapper(py::object pySupplier) :
-        _pySupplier(pySupplier.ptr()) {
-        Py_XINCREF(_pySupplier);
-    }
-
-    TokenSupplierWrapper(const TokenSupplierWrapper& other) {
-        _pySupplier= other._pySupplier;
-        Py_XINCREF(_pySupplier);
-    }
-
-    TokenSupplierWrapper& operator=(const TokenSupplierWrapper& other) {
-        _pySupplier = other._pySupplier;
-        Py_XINCREF(_pySupplier);
-        return *this;
-    }
-
-    virtual ~TokenSupplierWrapper() {
-        Py_XDECREF(_pySupplier);
-    }
-
-    std::string operator()() {
-        PyGILState_STATE state = PyGILState_Ensure();
-
-        std::string token;
-        try {
-            token = py::call<std::string>(_pySupplier);
-        } catch (py::error_already_set e) {
-            PyErr_Print();
-        }
-
-        PyGILState_Release(state);
-        return token;
-    }
-};
-
-
-struct AuthenticationTokenWrapper : public AuthenticationWrapper {
-    AuthenticationTokenWrapper(py::object token) :
-            AuthenticationWrapper() {
-        if (py::extract<std::string>(token).check()) {
-            // It's a string
-            std::string tokenStr = py::extract<std::string>(token);
-            this->auth = AuthToken::createWithToken(tokenStr);
-        } else {
-            // It's a function object
-            this->auth = AuthToken::create(TokenSupplierWrapper(token));
-        }
-    }
-};
-
-struct AuthenticationAthenzWrapper : public AuthenticationWrapper {
-    AuthenticationAthenzWrapper(const std::string& authParamsString) :
-            AuthenticationWrapper() {
-        this->auth = AuthAthenz::create(authParamsString);
-    }
-};
-
 void export_authentication() {
     using namespace boost::python;
 
     class_<AuthenticationWrapper>("Authentication", init<const std::string&, const std::string&>())
-            ;
-
-    class_<AuthenticationTlsWrapper, bases<AuthenticationWrapper> >("AuthenticationTLS",
-                                                                    init<const std::string&, const std::string&>())
-            ;
-
-    class_<AuthenticationTokenWrapper, bases<AuthenticationWrapper> >("AuthenticationToken",
-                                                                    init<py::object>())
-            ;
-
-    class_<AuthenticationAthenzWrapper, bases<AuthenticationWrapper> >("AuthenticationAthenz",
-                                                                       init<const std::string&>())
             ;
 }

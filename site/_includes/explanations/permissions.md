@@ -1,24 +1,3 @@
-<!--
-
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-    KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
-
--->
-
 Permissions in Pulsar are managed at the {% popover namespace %} level (that is, within {% popover properties %} and {% popover clusters %}).
 
 ### Grant permissions
@@ -34,37 +13,6 @@ $ pulsar-admin namespaces grant-permission test-property/cl1/ns1 \
   --actions produce,consume \
   --role admin10
 ```
-
-Wildcard authorization can be performed when `authorizationAllowWildcardsMatching` is set to `true` in `broker.conf`.
-
-e.g.
-```shell
-$ pulsar-admin namespaces grant-permission test-property/cl1/ns1 \
-                        --actions produce,consume \
-                        --role 'my.role.*'
-```
-
-Then, roles `my.role.1`, `my.role.2`, `my.role.foo`, `my.role.bar`, etc. can produce and consume.  
-
-```shell
-$ pulsar-admin namespaces grant-permission test-property/cl1/ns1 \
-                        --actions produce,consume \
-                        --role '*.role.my'
-```
-
-Then, roles `1.role.my`, `2.role.my`, `foo.role.my`, `bar.role.my`, etc. can produce and consume.
-
-**Note**: A wildcard matching works at **the beginning or end of the role name only**.
-
-e.g.
-```shell
-$ pulsar-admin namespaces grant-permission test-property/cl1/ns1 \
-                        --actions produce,consume \
-                        --role 'my.*.role'
-```
-
-In this case, only the role `my.*.role` has permissions.  
-Roles `my.1.role`, `my.2.role`, `my.foo.role`, `my.bar.role`, etc. **cannot** produce and consume.
 
 #### REST API
 

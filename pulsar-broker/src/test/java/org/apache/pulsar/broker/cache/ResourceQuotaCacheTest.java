@@ -18,29 +18,29 @@
  */
 package org.apache.pulsar.broker.cache;
 
-import static org.mockito.Matchers.any;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 
-import com.google.common.hash.Hashing;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
-import org.apache.bookkeeper.common.util.OrderedScheduler;
+import org.apache.bookkeeper.util.OrderedSafeExecutor;
 import org.apache.pulsar.broker.PulsarService;
+import org.apache.pulsar.broker.cache.LocalZooKeeperCacheService;
+import org.apache.pulsar.broker.cache.ResourceQuotaCache;
 import org.apache.pulsar.common.naming.NamespaceBundle;
 import org.apache.pulsar.common.naming.NamespaceBundleFactory;
 import org.apache.pulsar.common.naming.NamespaceName;
-import org.apache.pulsar.common.policies.data.LocalPolicies;
 import org.apache.pulsar.common.policies.data.ResourceQuota;
 import org.apache.pulsar.zookeeper.LocalZooKeeperCache;
 import org.apache.pulsar.zookeeper.ZooKeeperCache;
-import org.apache.pulsar.zookeeper.ZooKeeperDataCache;
 import org.apache.zookeeper.MockZooKeeper;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+
+import com.google.common.hash.Hashing;
 
 public class ResourceQuotaCacheTest {
 
@@ -48,21 +48,16 @@ public class ResourceQuotaCacheTest {
     private ZooKeeperCache zkCache;
     private LocalZooKeeperCacheService localCache;
     private NamespaceBundleFactory bundleFactory;
-    private OrderedScheduler executor;
+    private OrderedSafeExecutor executor;
+    private ScheduledExecutorService scheduledExecutor;
 
     @BeforeMethod
     public void setup() throws Exception {
         pulsar = mock(PulsarService.class);
-        executor = OrderedScheduler.newSchedulerBuilder().numThreads(1).name("test").build();
-        zkCache = new LocalZooKeeperCache(MockZooKeeper.newInstance(), executor);
+        executor = new OrderedSafeExecutor(1, "test");
+        scheduledExecutor = Executors.newSingleThreadScheduledExecutor();
+        zkCache = new LocalZooKeeperCache(MockZooKeeper.newInstance(), executor, scheduledExecutor);
         localCache = new LocalZooKeeperCacheService(zkCache, null);
-
-        // set mock pulsar localzkcache
-        LocalZooKeeperCacheService localZkCache = mock(LocalZooKeeperCacheService.class);
-        ZooKeeperDataCache<LocalPolicies> poilciesCache = mock(ZooKeeperDataCache.class);
-        when(pulsar.getLocalZkCacheService()).thenReturn(localZkCache);
-        when(localZkCache.policiesCache()).thenReturn(poilciesCache);
-        doNothing().when(poilciesCache).registerListener(any());
         bundleFactory = new NamespaceBundleFactory(pulsar, Hashing.crc32());
 
         doReturn(zkCache).when(pulsar).getLocalZkCache();
@@ -72,6 +67,7 @@ public class ResourceQuotaCacheTest {
     @AfterMethod
     public void teardown() {
         executor.shutdown();
+        scheduledExecutor.shutdown();
     }
 
     @Test
@@ -94,7 +90,7 @@ public class ResourceQuotaCacheTest {
     @Test
     public void testGetSetBundleQuota() throws Exception {
         ResourceQuotaCache cache = new ResourceQuotaCache(zkCache);
-        NamespaceBundle testBundle = bundleFactory.getFullBundle(NamespaceName.get("pulsar/test/ns-2"));
+        NamespaceBundle testBundle = bundleFactory.getFullBundle(new NamespaceName("pulsar/test/ns-2"));
         ResourceQuota quota1 = ResourceQuotaCache.getInitialQuotaValue();
         ResourceQuota quota2 = new ResourceQuota();
         quota2.setMsgRateIn(10);

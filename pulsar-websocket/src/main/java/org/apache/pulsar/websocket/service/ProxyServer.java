@@ -18,23 +18,25 @@
  */
 package org.apache.pulsar.websocket.service;
 
-import com.google.common.collect.Lists;
+import static org.apache.pulsar.websocket.admin.WebSocketWebResource.ATTRIBUTE_PROXY_SERVICE_NAME;
 
 import java.net.MalformedURLException;
 import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.TimeZone;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import javax.net.ssl.SSLContext;
 import javax.servlet.Servlet;
 import javax.servlet.ServletException;
 import javax.websocket.DeploymentException;
 
 import org.apache.pulsar.broker.PulsarServerException;
-import org.apache.pulsar.broker.web.JsonMapperProvider;
-import org.apache.pulsar.broker.web.WebExecutorThreadPool;
 import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.common.util.ObjectMapperFactory;
 import org.apache.pulsar.common.util.SecurityUtility;
+import org.apache.pulsar.websocket.WebSocketService;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
@@ -46,44 +48,53 @@ import org.eclipse.jetty.server.handler.RequestLogHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.eclipse.jetty.util.thread.ExecutorThreadPool;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.servlet.ServletContainer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider;
+import com.google.common.collect.Lists;
+
+import io.netty.util.concurrent.DefaultThreadFactory;
+
 public class ProxyServer {
     private final Server server;
     private final List<Handler> handlers = Lists.newArrayList();
     private final WebSocketProxyConfiguration conf;
-    private final WebExecutorThreadPool executorService;
-
+    private final ExecutorService executorService;
+    
     public ProxyServer(WebSocketProxyConfiguration config)
             throws PulsarClientException, MalformedURLException, PulsarServerException {
         this.conf = config;
-        executorService = new WebExecutorThreadPool(config.getNumHttpServerThreads(), "pulsar-websocket-web");
-        this.server = new Server(executorService);
+        executorService = Executors.newFixedThreadPool(WebSocketProxyConfiguration.PROXY_SERVER_EXECUTOR_THREADS,
+                new DefaultThreadFactory("pulsar-websocket-web"));
+        this.server = new Server(new ExecutorThreadPool(executorService));
         List<ServerConnector> connectors = new ArrayList<>();
 
-        if (config.getWebServicePort().isPresent()) {
-			ServerConnector connector = new ServerConnector(server);
-			connector.setPort(config.getWebServicePort().get());
-			connectors.add(connector);
-        }
+        ServerConnector connector = new ServerConnector(server);
+
+        connector.setPort(config.getWebServicePort());
+        connectors.add(connector);
+
         // TLS enabled connector
-        if (config.getWebServicePortTls().isPresent()) {
+        if (config.isTlsEnabled()) {
+            SslContextFactory sslCtxFactory = new SslContextFactory(true);
             try {
-                SslContextFactory sslCtxFactory = SecurityUtility.createSslContextFactory(
-                        config.isTlsAllowInsecureConnection(),
-                        config.getTlsTrustCertsFilePath(),
-                        config.getTlsCertificateFilePath(),
-                        config.getTlsKeyFilePath(),
-                        config.getTlsRequireTrustedClientCertOnConnect());
-                ServerConnector tlsConnector = new ServerConnector(server, -1, -1, sslCtxFactory);
-                tlsConnector.setPort(config.getWebServicePortTls().get());
-                connectors.add(tlsConnector);
+                SSLContext sslCtx = SecurityUtility.createSslContext(false, config.getTlsTrustCertsFilePath(), config.getTlsCertificateFilePath(),
+                        config.getTlsKeyFilePath());
+                sslCtxFactory.setSslContext(sslCtx);
+
             } catch (GeneralSecurityException e) {
                 throw new PulsarServerException(e);
             }
+
+            sslCtxFactory.setWantClientAuth(true);
+            ServerConnector tlsConnector = new ServerConnector(server, -1, -1, sslCtxFactory);
+            tlsConnector.setPort(config.getWebServicePortTls());
+            connectors.add(tlsConnector);
+
         }
 
         // Limit number of concurrent HTTP connections to avoid getting out of
@@ -101,26 +112,28 @@ public class ProxyServer {
         handlers.add(context);
     }
 
-    public void addRestResources(String basePath, String javaPackages, String attribute, Object attributeValue) {
+    public void addRestResources(String basePath, String javaPackages, WebSocketService service) {
+        JacksonJaxbJsonProvider provider = new JacksonJaxbJsonProvider();
+        provider.setMapper(ObjectMapperFactory.create());
         ResourceConfig config = new ResourceConfig();
         config.packages("jersey.config.server.provider.packages", javaPackages);
-        config.register(JsonMapperProvider.class);
+        config.register(provider);
         ServletHolder servletHolder = new ServletHolder(new ServletContainer(config));
         servletHolder.setAsyncSupported(true);
         ServletContextHandler context = new ServletContextHandler(ServletContextHandler.SESSIONS);
         context.setContextPath(basePath);
         context.addServlet(servletHolder, "/*");
-        context.setAttribute(attribute, attributeValue);
+        context.setAttribute(ATTRIBUTE_PROXY_SERVICE_NAME, service);
         handlers.add(context);
     }
 
     public void start() throws PulsarServerException {
-        log.info("Starting web socket proxy at port {}", conf.getWebServicePort().get());
+        log.info("Starting web socket proxy at port {}", conf.getWebServicePort());
         try {
             RequestLogHandler requestLogHandler = new RequestLogHandler();
             Slf4jRequestLog requestLog = new Slf4jRequestLog();
             requestLog.setExtended(true);
-            requestLog.setLogTimeZone(TimeZone.getDefault().getID());
+            requestLog.setLogTimeZone("GMT");
             requestLog.setLogLatency(true);
             requestLogHandler.setRequestLog(requestLog);
             handlers.add(0, new ContextHandlerCollection());
@@ -141,7 +154,7 @@ public class ProxyServer {
 
     public void stop() throws Exception {
         server.stop();
-        executorService.stop();
+        executorService.shutdown();
     }
 
     private static final Logger log = LoggerFactory.getLogger(ProxyServer.class);

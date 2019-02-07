@@ -39,7 +39,7 @@ public class CompressorCodecTest {
 
     @DataProvider(name = "codec")
     public Object[][] codecProvider() {
-        return new Object[][] { { CompressionType.NONE }, { CompressionType.LZ4 }, { CompressionType.ZLIB }, { CompressionType.ZSTD }};
+        return new Object[][] { { CompressionType.NONE }, { CompressionType.LZ4 }, { CompressionType.ZLIB }, };
     }
 
     @Test(dataProvider = "codec")
@@ -109,8 +109,10 @@ public class CompressorCodecTest {
 
     @Test(dataProvider = "codec")
     void testCodecProvider(CompressionType type) throws IOException {
-        CompressionCodec codec1 = CompressionCodecProvider.getCompressionCodec(type);
-        CompressionCodec codec2 = CompressionCodecProvider.getCompressionCodec(type);
+        CompressionCodecProvider provider = new CompressionCodecProvider();
+
+        CompressionCodec codec1 = provider.getCodec(type);
+        CompressionCodec codec2 = provider.getCodec(type);
 
         // A single provider instance must return the same codec instance every time
         assertTrue(codec1 == codec2);

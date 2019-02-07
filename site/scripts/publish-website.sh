@@ -18,7 +18,11 @@
 # under the License.
 #
 
-set -e
+if [ "$TRAVIS_BRANCH" != "master" ]
+then
+  echo "This commit was made against the $TRAVIS_BRANCH and not the master! No deploy!"
+  exit 0
+fi
 
 ROOT_DIR=$(git rev-parse --show-toplevel)
 
@@ -27,25 +31,24 @@ echo "ORIGIN_REPO: $ORIGIN_REPO"
 
 GENERATED_SITE_DIR=$ROOT_DIR/generated-site
 
-PULSAR_SITE_TMP=/tmp/pulsar-site
 (
   cd $ROOT_DIR
+
   REVISION=$(git rev-parse --short HEAD)
 
-  rm -rf $PULSAR_SITE_TMP
-  mkdir $PULSAR_SITE_TMP
-  cd $PULSAR_SITE_TMP
+  cd $GENERATED_SITE_DIR
 
-  git clone "https://$GH_TOKEN@$ORIGIN_REPO" .
+  git init
   git config user.name "Pulsar Site Updater"
   git config user.email "dev@pulsar.incubator.apache.org"
-  git checkout asf-site
 
-  # copy the apache generated dir
-  cp -r $GENERATED_SITE_DIR/content/* $PULSAR_SITE_TMP/content
+  git remote add upstream "https://$GH_TOKEN@$ORIGIN_REPO"
+  git fetch upstream
+  git reset upstream/asf-site
+
+  touch .
 
   git add -A .
-  git diff-index --quiet HEAD || (git commit -m "Updated site at revision $REVISION" && git push -q origin HEAD:asf-site)
-
-  rm -rf $PULSAR_SITE_TMP
+  git commit -m "Updated site at revision $REVISION"
+  git push -q upstream HEAD:asf-site
 )

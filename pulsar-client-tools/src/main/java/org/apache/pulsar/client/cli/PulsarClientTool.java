@@ -18,8 +18,8 @@
  */
 package org.apache.pulsar.client.cli;
 
-import static org.apache.commons.lang3.StringUtils.isBlank;
 import static org.apache.commons.lang3.StringUtils.isNotBlank;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 import java.io.FileInputStream;
 import java.net.MalformedURLException;
@@ -27,9 +27,10 @@ import java.util.Arrays;
 import java.util.Properties;
 
 import org.apache.commons.lang3.StringUtils;
-import org.apache.pulsar.client.api.ClientBuilder;
-import org.apache.pulsar.client.api.PulsarClient;
+import org.apache.pulsar.client.api.ClientConfiguration;
 import org.apache.pulsar.client.api.PulsarClientException.UnsupportedAuthenticationException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -38,6 +39,8 @@ import com.beust.jcommander.Parameters;
 
 @Parameters(commandDescription = "Produce or consume messages on a specified topic")
 public class PulsarClientTool {
+
+    private static final Logger LOG = LoggerFactory.getLogger(PulsarClientTool.class);
 
     @Parameter(names = { "--url" }, description = "Broker URL to which to connect.")
     String serviceURL = null;
@@ -51,8 +54,8 @@ public class PulsarClientTool {
     @Parameter(names = { "-h", "--help", }, help = true, description = "Show this help.")
     boolean help;
 
+    boolean useTls = false;
     boolean tlsAllowInsecureConnection = false;
-    boolean tlsEnableHostnameVerification = false;
     String tlsTrustCertsFilePath = null;
 
     JCommander commandParser;
@@ -62,16 +65,14 @@ public class PulsarClientTool {
     public PulsarClientTool(Properties properties) throws MalformedURLException {
         this.serviceURL = StringUtils.isNotBlank(properties.getProperty("brokerServiceUrl"))
                 ? properties.getProperty("brokerServiceUrl") : properties.getProperty("webServiceUrl");
-        // fallback to previous-version serviceUrl property to maintain backward-compatibility
+        // fallback to previous-version serviceUrl property to maintain backward-compatibility        
         if (StringUtils.isBlank(this.serviceURL)) {
             this.serviceURL = properties.getProperty("serviceUrl");
         }
         this.authPluginClassName = properties.getProperty("authPlugin");
         this.authParams = properties.getProperty("authParams");
-        this.tlsAllowInsecureConnection = Boolean
-                .parseBoolean(properties.getProperty("tlsAllowInsecureConnection", "false"));
-        this.tlsEnableHostnameVerification = Boolean
-                .parseBoolean(properties.getProperty("tlsEnableHostnameVerification", "false"));
+        this.useTls = Boolean.parseBoolean(properties.getProperty("useTls"));
+        this.tlsAllowInsecureConnection = Boolean.parseBoolean(properties.getProperty("tlsAllowInsecureConnection"));
         this.tlsTrustCertsFilePath = properties.getProperty("tlsTrustCertsFilePath");
 
         produceCommand = new CmdProduce();
@@ -85,26 +86,26 @@ public class PulsarClientTool {
     }
 
     private void updateConfig() throws UnsupportedAuthenticationException, MalformedURLException {
-        ClientBuilder clientBuilder = PulsarClient.builder();
+        ClientConfiguration configuration = new ClientConfiguration();
         if (isNotBlank(this.authPluginClassName)) {
-            clientBuilder.authentication(authPluginClassName, authParams);
+            configuration.setAuthentication(authPluginClassName, authParams);
         }
-        clientBuilder.allowTlsInsecureConnection(this.tlsAllowInsecureConnection);
-        clientBuilder.tlsTrustCertsFilePath(this.tlsTrustCertsFilePath);
-        clientBuilder.serviceUrl(serviceURL);
-        this.produceCommand.updateConfig(clientBuilder);
-        this.consumeCommand.updateConfig(clientBuilder);
+        configuration.setUseTls(this.useTls);
+        configuration.setTlsAllowInsecureConnection(this.tlsAllowInsecureConnection);
+        configuration.setTlsTrustCertsFilePath(this.tlsTrustCertsFilePath);
+
+        this.produceCommand.updateConfig(this.serviceURL, configuration);
+        this.consumeCommand.updateConfig(this.serviceURL, configuration);
     }
 
     public int run(String[] args) {
         try {
-            commandParser.parse(args);
-
             if (isBlank(this.serviceURL)) {
                 commandParser.usage();
                 return -1;
             }
 
+            commandParser.parse(args);
             if (help) {
                 commandParser.usage();
                 return 0;
@@ -134,9 +135,8 @@ public class PulsarClientTool {
             }
         } catch (Exception e) {
             System.out.println(e.getMessage());
-            String chosenCommand = commandParser.getParsedCommand();
             if (e instanceof ParameterException) {
-                commandParser.usage(chosenCommand);
+                commandParser.usage();
             } else {
                 e.printStackTrace();
             }
@@ -153,8 +153,14 @@ public class PulsarClientTool {
         Properties properties = new Properties();
 
         if (configFile != null) {
-            try (FileInputStream fis = new FileInputStream(configFile)) {
+            FileInputStream fis = null;
+            try {
+                fis = new FileInputStream(configFile);
                 properties.load(fis);
+            } finally {
+                if (fis != null) {
+                    fis.close();
+                }
             }
         }
 

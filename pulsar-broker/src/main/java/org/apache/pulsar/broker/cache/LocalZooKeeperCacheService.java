@@ -18,12 +18,11 @@
  */
 package org.apache.pulsar.broker.cache;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.pulsar.broker.cache.ConfigurationCacheService.POLICIES_ROOT;
 import static org.apache.pulsar.broker.web.PulsarWebResource.joinPath;
 
-import com.google.common.collect.Maps;
-import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -40,7 +39,6 @@ import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.ZooDefs.Ids;
 import org.apache.zookeeper.ZooKeeper;
-import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,28 +80,17 @@ public class LocalZooKeeperCacheService {
 
             @Override
             public CompletableFuture<Optional<LocalPolicies>> getAsync(String path) {
-                return getWithStatAsync(path).thenApply(entry -> entry.map(e -> e.getKey()));
-            }
-
-            @Override
-            public CompletableFuture<Optional<Entry<LocalPolicies, Stat>>> getWithStatAsync(String path) {
-                CompletableFuture<Optional<Entry<LocalPolicies, Stat>>> future = new CompletableFuture<>();
+                CompletableFuture<Optional<LocalPolicies>> future = new CompletableFuture<>();
 
                 // First check in local-zk cache
-                super.getWithStatAsync(path).thenAccept(result -> {
-                    Optional<LocalPolicies> localPolicies = result.map(Entry::getKey);
+                super.getAsync(path).thenAccept(localPolicies -> {
                     if (localPolicies.isPresent()) {
-                        future.complete(result);
+                        future.complete(localPolicies);
                     } else {
                         // create new policies node under Local ZK by coping it from Global ZK
                         createPolicies(path, true).thenAccept(p -> {
                             LOG.info("Successfully created local policies for {} -- {}", path, p);
-                            // local-policies have been created but it's not part of policiesCache. so, call
-                            // super.getAsync() which will load it and set the watch on local-policies path
-                            super.getWithStatAsync(path);
-                            Stat stat = new Stat();
-                            stat.setVersion(-1);
-                            future.complete(Optional.of(Maps.immutableEntry(p.orElse(null), stat)));
+                            future.complete(p);
                         }).exceptionally(ex -> {
                             future.completeExceptionally(ex);
                             return null;
@@ -157,11 +144,10 @@ public class LocalZooKeeperCacheService {
      */
     @SuppressWarnings("deprecation")
     public CompletableFuture<Optional<LocalPolicies>> createPolicies(String path, boolean readFromGlobal) {
+        checkNotNull(path, "path can't be null");
+        checkArgument(path.startsWith(LOCAL_POLICIES_ROOT), "Invalid path of local policies");
+
         CompletableFuture<Optional<LocalPolicies>> future = new CompletableFuture<>();
-        if (path == null || !path.startsWith(LOCAL_POLICIES_ROOT)) {
-            future.completeExceptionally(new IllegalArgumentException("Invalid path of local policies " + path));
-            return future;
-        }
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("Creating local namespace policies for {} - readFromGlobal: {}", path, readFromGlobal);

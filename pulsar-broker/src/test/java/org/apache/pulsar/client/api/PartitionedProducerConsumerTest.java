@@ -22,21 +22,25 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static org.testng.Assert.fail;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.ConsumerConfiguration;
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.MessageBuilder;
+import org.apache.pulsar.client.api.Producer;
+import org.apache.pulsar.client.api.ProducerConfiguration;
+import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.api.SubscriptionType;
+import org.apache.pulsar.client.api.ProducerConfiguration.MessageRoutingMode;
 import org.apache.pulsar.client.impl.PartitionedProducerImpl;
-import org.apache.pulsar.client.impl.TypedMessageBuilderImpl;
-import org.apache.pulsar.common.naming.TopicName;
+import org.apache.pulsar.common.naming.DestinationName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.testng.Assert;
@@ -72,26 +76,27 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testRoundRobinProducer() throws Exception {
         log.info("-- Starting {} test --", methodName);
-        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         int numPartitions = 4;
-        TopicName topicName = TopicName.get("persistent://my-property/my-ns/my-partitionedtopic1-" + System.currentTimeMillis());
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic1");
 
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        ConsumerConfiguration conf = new ConsumerConfiguration();
+        conf.setSubscriptionType(SubscriptionType.Exclusive);
 
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
-            .enableBatching(false)
-            .messageRoutingMode(MessageRoutingMode.RoundRobinPartition).create();
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
-                .subscriptionName("my-partitioned-subscriber").subscribe();
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setMessageRoutingMode(MessageRoutingMode.RoundRobinPartition);
+        Producer producer = pulsarClient.createProducer(dn.toString(), producerConf);
+
+        Consumer consumer = pulsarClient.subscribe(dn.toString(), "my-partitioned-subscriber", conf);
 
         for (int i = 0; i < 10; i++) {
             String message = "my-message-" + i;
             producer.send(message.getBytes());
         }
 
-        Message<byte[]> msg;
+        Message msg = null;
         Set<String> messageSet = Sets.newHashSet();
         for (int i = 0; i < 10; i++) {
             msg = consumer.receive(5, TimeUnit.SECONDS);
@@ -105,8 +110,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
-        pulsarClient.close();
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
         log.info("-- Exiting {} test --", methodName);
     }
@@ -116,93 +120,44 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         log.info("-- Starting {} test --", methodName);
 
         int numPartitions = 4;
-        final String specialCharacter = "! * ' ( ) ; : @ & = + $ , \\ ? % # [ ]";
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic1-" + System.currentTimeMillis() + specialCharacter);
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        final String specialCharacter = "! * ' ( ) ; : @ & = + $ , /\\ ? % # [ ]";
+        final String topicName = "my-partitionedtopic1" + specialCharacter;
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/" + topicName);
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setMessageRoutingMode(MessageRoutingMode.RoundRobinPartition);
         // Try to create producer which does lookup and create connection with broker
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
-                .messageRoutingMode(MessageRoutingMode.RoundRobinPartition).create();
+        Producer producer = pulsarClient.createProducer(dn.toString(), producerConf);
         producer.close();
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
         log.info("-- Exiting {} test --", methodName);
-    }
-
-    @Test(timeOut = 30000)
-    public void testCustomPartitionProducer() throws Exception {
-        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
-        TopicName topicName = null;
-        Producer<byte[]> producer = null;
-        Consumer<byte[]> consumer = null;
-        final int MESSAGE_COUNT = 16;
-        try {
-            log.info("-- Starting {} test --", methodName);
-
-            int numPartitions = 4;
-            topicName = TopicName
-                    .get("persistent://my-property/my-ns/my-partitionedtopic1-" + System.currentTimeMillis());
-
-            admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
-
-            producer = pulsarClient.newProducer().topic(topicName.toString())
-                    .messageRouter(new AlwaysTwoMessageRouter())
-                    .create();
-
-            consumer = pulsarClient.newConsumer().topic(topicName.toString())
-                    .subscriptionName("my-partitioned-subscriber").subscribe();
-
-            for (int i = 0; i < MESSAGE_COUNT; i++) {
-                String message = "my-message-" + i;
-                producer.newMessage().key(String.valueOf(i)).value(message.getBytes()).send();
-            }
-
-            Message<byte[]> msg;
-            Set<String> messageSet = Sets.newHashSet();
-
-            for (int i = 0; i < MESSAGE_COUNT; i++) {
-                msg = consumer.receive(5, TimeUnit.SECONDS);
-                Assert.assertNotNull(msg, "Message should not be null");
-                consumer.acknowledge(msg);
-                String receivedMessage = new String(msg.getData());
-                log.debug("Received message: [{}]", receivedMessage);
-                String expectedMessage = "my-message-" + i;
-                testMessageOrderAndDuplicates(messageSet, receivedMessage, expectedMessage);
-            }
-        } finally {
-            producer.close();
-            consumer.unsubscribe();
-            consumer.close();
-            pulsarClient.close();
-            admin.topics().deletePartitionedTopic(topicName.toString());
-
-            log.info("-- Exiting {} test --", methodName);
-        }
     }
 
     @Test(timeOut = 30000)
     public void testSinglePartitionProducer() throws Exception {
         log.info("-- Starting {} test --", methodName);
-        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         int numPartitions = 4;
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic2-" + System.currentTimeMillis());
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic2");
 
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        ConsumerConfiguration conf = new ConsumerConfiguration();
+        conf.setSubscriptionType(SubscriptionType.Exclusive);
 
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
-                .messageRoutingMode(MessageRoutingMode.SinglePartition).create();
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
-                .subscriptionName("my-partitioned-subscriber").subscribe();
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setMessageRoutingMode(MessageRoutingMode.SinglePartition);
+        Producer producer = pulsarClient.createProducer(dn.toString(), producerConf);
+
+        Consumer consumer = pulsarClient.subscribe(dn.toString(), "my-partitioned-subscriber", conf);
 
         for (int i = 0; i < 10; i++) {
             String message = "my-message-" + i;
             producer.send(message.getBytes());
         }
 
-        Message<byte[]> msg;
+        Message msg = null;
         Set<String> messageSet = Sets.newHashSet();
 
         for (int i = 0; i < 10; i++) {
@@ -218,8 +173,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
-        pulsarClient.close();
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
         log.info("-- Exiting {} test --", methodName);
     }
@@ -227,32 +181,35 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testKeyBasedProducer() throws Exception {
         log.info("-- Starting {} test --", methodName);
-        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         int numPartitions = 4;
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic3-" + System.currentTimeMillis());
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic3");
         String dummyKey1 = "dummykey1";
         String dummyKey2 = "dummykey2";
 
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        ConsumerConfiguration conf = new ConsumerConfiguration();
+        conf.setSubscriptionType(SubscriptionType.Exclusive);
 
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString()).create();
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
-                .subscriptionName("my-partitioned-subscriber").subscribe();
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
+        Producer producer = pulsarClient.createProducer(dn.toString());
+        Consumer consumer = pulsarClient.subscribe(dn.toString(), "my-partitioned-subscriber", conf);
+
+        Message msg = null;
         for (int i = 0; i < 5; i++) {
             String message = "my-message-" + i;
-            producer.newMessage().key(dummyKey1).value(message.getBytes()).send();
+            msg = MessageBuilder.create().setContent(message.getBytes()).setKey(dummyKey1).build();
+            producer.send(msg);
         }
         for (int i = 5; i < 10; i++) {
             String message = "my-message-" + i;
-            producer.newMessage().key(dummyKey2).value(message.getBytes()).send();
+            msg = MessageBuilder.create().setContent(message.getBytes()).setKey(dummyKey2).build();
+            producer.send(msg);
         }
 
         Set<String> messageSet = Sets.newHashSet();
         for (int i = 0; i < 10; i++) {
-            Message<byte[]> msg = consumer.receive(5, TimeUnit.SECONDS);
+            msg = consumer.receive(5, TimeUnit.SECONDS);
             Assert.assertNotNull(msg, "Message should not be null");
             consumer.acknowledge(msg);
             String receivedMessage = new String(msg.getData());
@@ -264,8 +221,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
-        pulsarClient.close();
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
         log.info("-- Exiting {} test --", methodName);
     }
@@ -279,81 +235,22 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         Assert.assertTrue(messageSet.add(message), "Received duplicate message " + message);
     }
 
-    @Test(timeOut = 100000)
-    public void testPauseAndResume() throws Exception {
-        log.info("-- Starting {} test --", methodName);
-        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
-
-        int numPartitions = 2;
-        String topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic-pr-" + System.currentTimeMillis()).toString();
-
-        admin.topics().createPartitionedTopic(topicName, numPartitions);
-
-        int receiverQueueSize = 20; // number of permits broker has per partition when consumer initially subscribes
-        int numMessages = receiverQueueSize * numPartitions;
-
-        AtomicReference<CountDownLatch> latch = new AtomicReference<>(new CountDownLatch(numMessages));
-        AtomicInteger received = new AtomicInteger();
-
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().receiverQueueSize(receiverQueueSize)
-                .topic(topicName)
-                .subscriptionName("my-partitioned-subscriber").messageListener((c1, msg) -> {
-                    Assert.assertNotNull(msg, "Message cannot be null");
-                    String receivedMessage = new String(msg.getData());
-                    log.debug("Received message [{}] in the listener", receivedMessage);
-                    c1.acknowledgeAsync(msg);
-                    received.incrementAndGet();
-                    latch.get().countDown();
-                }).subscribe();
-
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName).create();
-
-        consumer.pause();
-
-        for (int i = 0; i < numMessages * 2; i++) producer.send(("my-message-" + i).getBytes());
-
-        log.info("Waiting for message listener to ack " + numMessages + " messages");
-        assertEquals(latch.get().await(numMessages, TimeUnit.SECONDS), true, "Timed out waiting for message listener acks");
-
-        log.info("Giving message listener an opportunity to receive messages while paused");
-        Thread.sleep(2000);     // hopefully this is long enough
-        assertEquals(received.intValue(), numMessages, "Consumer received messages while paused");
-
-        latch.set(new CountDownLatch(numMessages));
-
-        consumer.resume();
-
-        log.info("Waiting for message listener to ack all messages");
-        assertEquals(latch.get().await(numMessages, TimeUnit.SECONDS), true, "Timed out waiting for message listener acks");
-
-        consumer.close();
-        producer.close();
-        pulsarClient.close();
-        log.info("-- Exiting {} test --", methodName);
-    }
-
     @Test(timeOut = 30000)
     public void testInvalidSequence() throws Exception {
         log.info("-- Starting {} test --", methodName);
 
         int numPartitions = 4;
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic4-" + System.currentTimeMillis());
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic4");
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
-                .subscriptionName("my-subscriber-name").subscribe();
+        ConsumerConfiguration consumerConf = new ConsumerConfiguration();
+        consumerConf.setSubscriptionType(SubscriptionType.Exclusive);
 
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
-                .enableBatching(false)
-                .messageRoutingMode(MessageRoutingMode.SinglePartition)
-                .create();
+        Consumer consumer = pulsarClient.subscribe(dn.toString(), "my-subscriber-name", consumerConf);
 
         try {
-            TypedMessageBuilderImpl<byte[]> mb = (TypedMessageBuilderImpl<byte[]>) producer.newMessage()
-                    .value("InvalidMessage".getBytes());
-            consumer.acknowledge(mb.getMessage());
+            Message msg = MessageBuilder.create().setContent("InvalidMessage".getBytes()).build();
+            consumer.acknowledge(msg);
         } catch (PulsarClientException.InvalidMessageException e) {
             // ok
         }
@@ -374,7 +271,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
             // ok
         }
 
-
+        Producer producer = pulsarClient.createProducer(dn.toString());
         producer.close();
 
         try {
@@ -384,7 +281,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
             // ok
         }
 
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
     }
 
@@ -392,63 +289,79 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     public void testSillyUser() throws Exception {
 
         int numPartitions = 4;
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic5-" + System.currentTimeMillis());
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic5");
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
-        Producer<byte[]> producer = null;
-        Consumer<byte[]> consumer = null;
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        Producer producer = null;
+        Consumer consumer = null;
 
         try {
-            pulsarClient.newProducer().messageRouter(null);
+            producerConf.setMessageRouter(null);
             Assert.fail("should fail");
         } catch (NullPointerException e) {
             // ok
         }
 
         try {
-            pulsarClient.newProducer().messageRoutingMode(null);
+            producerConf.setMessageRoutingMode(null);
             Assert.fail("should fail");
         } catch (NullPointerException e) {
             // ok
         }
 
         try {
-            producer = pulsarClient.newProducer().topic(topicName.toString()).enableBatching(false)
-                    .messageRoutingMode(MessageRoutingMode.SinglePartition).create();
-            consumer = pulsarClient.newConsumer().topic(topicName.toString()).subscriptionName("my-sub").subscribe();
+            producer = pulsarClient.createProducer(dn.toString(), null);
+            Assert.fail("should fail");
+        } catch (PulsarClientException e) {
+            Assert.assertTrue(e instanceof PulsarClientException.InvalidConfigurationException);
+        }
+
+        ConsumerConfiguration consumerConf = new ConsumerConfiguration();
+
+        try {
+            consumer = pulsarClient.subscribe(dn.toString(), "my-subscriber-name", null);
+            Assert.fail("Should fail");
+        } catch (PulsarClientException e) {
+            Assert.assertTrue(e instanceof PulsarClientException.InvalidConfigurationException);
+        }
+
+        try {
+            producer = pulsarClient.createProducer(dn.toString());
+            consumer = pulsarClient.subscribe(dn.toString(), "my-sub");
             producer.send("message1".getBytes());
             producer.send("message2".getBytes());
-            /* Message<byte[]> msg1 = */ consumer.receive();
-            Message<byte[]> msg2 = consumer.receive();
+            Message msg1 = consumer.receive();
+            Message msg2 = consumer.receive();
             consumer.acknowledgeCumulative(msg2);
+            Assert.fail("should fail since ack cumulative is not supported for partitioned topic");
+        } catch (PulsarClientException e) {
+            Assert.assertTrue(e instanceof PulsarClientException.NotSupportedException);
         } finally {
             producer.close();
             consumer.unsubscribe();
             consumer.close();
         }
 
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
     }
 
     @Test(timeOut = 30000)
     public void testDeletePartitionedTopic() throws Exception {
         int numPartitions = 4;
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic6-" + System.currentTimeMillis());
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic6");
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString()).create();
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString()).subscriptionName("my-sub")
-                .subscribe();
+        Producer producer = pulsarClient.createProducer(dn.toString());
+        Consumer consumer = pulsarClient.subscribe(dn.toString(), "my-sub");
         consumer.unsubscribe();
         consumer.close();
         producer.close();
 
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
-        Producer<byte[]> producer1 = pulsarClient.newProducer().topic(topicName.toString()).create();
+        Producer producer1 = pulsarClient.createProducer(dn.toString());
         if (producer1 instanceof PartitionedProducerImpl) {
             Assert.fail("should fail since partitioned topic was deleted");
         }
@@ -463,16 +376,18 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         final Set<String> consumeMsgs = Sets.newHashSet();
 
         int numPartitions = 4;
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic1-" + System.currentTimeMillis());
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic1");
 
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
-            .enableBatching(false)
-            .messageRoutingMode(MessageRoutingMode.RoundRobinPartition).create();
+        ConsumerConfiguration conf = new ConsumerConfiguration();
+        conf.setSubscriptionType(SubscriptionType.Shared);
 
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
-                .subscriptionName("my-partitioned-subscriber").subscriptionType(SubscriptionType.Shared).subscribe();
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
+
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setMessageRoutingMode(MessageRoutingMode.RoundRobinPartition);
+        Producer producer = pulsarClient.createProducer(dn.toString(), producerConf);
+
+        Consumer consumer = pulsarClient.subscribe(dn.toString(), "my-partitioned-subscriber", conf);
 
         // produce messages
         for (int i = 0; i < totalMsg; i++) {
@@ -498,7 +413,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
         log.info("-- Exiting {} test --", methodName);
     }
@@ -506,24 +421,24 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testAsyncPartitionedProducerConsumerQueueSizeOne() throws Exception {
         log.info("-- Starting {} test --", methodName);
-        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         final int totalMsg = 100;
         final Set<String> produceMsgs = Sets.newHashSet();
         final Set<String> consumeMsgs = Sets.newHashSet();
 
         int numPartitions = 4;
-        TopicName topicName = TopicName
-                .get("persistent://my-property/my-ns/my-partitionedtopic1-" + System.currentTimeMillis());
+        DestinationName dn = DestinationName.get("persistent://my-property/use/my-ns/my-partitionedtopic1");
 
-        admin.topics().createPartitionedTopic(topicName.toString(), numPartitions);
+        ConsumerConfiguration conf = new ConsumerConfiguration();
+        conf.setReceiverQueueSize(1);
 
-        Producer<byte[]> producer = pulsarClient.newProducer().topic(topicName.toString())
-            .enableBatching(false)
-            .messageRoutingMode(MessageRoutingMode.RoundRobinPartition).create();
+        admin.persistentTopics().createPartitionedTopic(dn.toString(), numPartitions);
 
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName.toString())
-                .subscriptionName("my-partitioned-subscriber").receiverQueueSize(1).subscribe();
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setMessageRoutingMode(MessageRoutingMode.RoundRobinPartition);
+        Producer producer = pulsarClient.createProducer(dn.toString(), producerConf);
+
+        Consumer consumer = pulsarClient.subscribe(dn.toString(), "my-partitioned-subscriber", conf);
 
         // produce messages
         for (int i = 0; i < totalMsg; i++) {
@@ -549,8 +464,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer.close();
         consumer.unsubscribe();
         consumer.close();
-        pulsarClient.close();
-        admin.topics().deletePartitionedTopic(topicName.toString());
+        admin.persistentTopics().deletePartitionedTopic(dn.toString());
 
         log.info("-- Exiting {} test --", methodName);
     }
@@ -563,23 +477,24 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
     @Test(timeOut = 30000)
     public void testFairDistributionForPartitionConsumers() throws Exception {
         log.info("-- Starting {} test --", methodName);
-        PulsarClient pulsarClient = newPulsarClient(lookupUrl.toString(), 0);// Creates new client connection
 
         final int numPartitions = 2;
-        final String topicName = "persistent://my-property/my-ns/my-topic-" + System.currentTimeMillis();
+        final String topicName = "persistent://my-property/use/my-ns/my-topic";
         final String producer1Msg = "producer1";
         final String producer2Msg = "producer2";
         final int queueSize = 10;
 
-        admin.topics().createPartitionedTopic(topicName, numPartitions);
+        ConsumerConfiguration conf = new ConsumerConfiguration();
+        conf.setReceiverQueueSize(queueSize);
 
-        Producer<byte[]> producer1 = pulsarClient.newProducer().topic(topicName + "-partition-0")
-                .messageRoutingMode(MessageRoutingMode.RoundRobinPartition).create();
-        Producer<byte[]> producer2 = pulsarClient.newProducer().topic(topicName + "-partition-1")
-                .messageRoutingMode(MessageRoutingMode.RoundRobinPartition).create();
+        admin.persistentTopics().createPartitionedTopic(topicName, numPartitions);
 
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic(topicName)
-                .subscriptionName("my-partitioned-subscriber").receiverQueueSize(queueSize).subscribe();
+        ProducerConfiguration producerConf = new ProducerConfiguration();
+        producerConf.setMessageRoutingMode(MessageRoutingMode.RoundRobinPartition);
+        Producer producer1 = pulsarClient.createProducer(topicName + "-partition-0", producerConf);
+        Producer producer2 = pulsarClient.createProducer(topicName + "-partition-1", producerConf);
+
+        Consumer consumer = pulsarClient.subscribe(topicName, "my-partitioned-subscriber", conf);
 
         int partition2Msgs = 0;
 
@@ -599,7 +514,7 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         // also: we will keep producing messages to partition-1
         int produceMsgInPartition1AfterNumberOfConsumeMessages = 2;
         for (int i = 0; i < 3 * queueSize; i++) {
-            Message<byte[]> msg = consumer.receive();
+            Message msg = consumer.receive();
             partition2Msgs += (new String(msg.getData())).startsWith(producer2Msg) ? 1 : 0;
             if (i >= produceMsgInPartition1AfterNumberOfConsumeMessages) {
                 producer1.send(producer1Msg.getBytes());
@@ -613,16 +528,15 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         producer2.close();
         consumer.unsubscribe();
         consumer.close();
-        pulsarClient.close();
-        admin.topics().deletePartitionedTopic(topicName);
+        admin.persistentTopics().deletePartitionedTopic(topicName);
 
         log.info("-- Exiting {} test --", methodName);
     }
 
-    private void receiveAsync(Consumer<byte[]> consumer, int totalMessage, int currentMessage, CountDownLatch latch,
+    private void receiveAsync(Consumer consumer, int totalMessage, int currentMessage, CountDownLatch latch,
             final Set<String> consumeMsg, ExecutorService executor) throws PulsarClientException {
         if (currentMessage < totalMessage) {
-            CompletableFuture<Message<byte[]>> future = consumer.receiveAsync();
+            CompletableFuture<Message> future = consumer.receiveAsync();
             future.handle((msg, exception) -> {
                 if (exception == null) {
                     // add message to consumer-queue to verify with produced messages
@@ -647,30 +561,4 @@ public class PartitionedProducerConsumerTest extends ProducerConsumerBase {
         }
     }
 
-    @Test
-    public void testGetPartitionsForTopic() throws Exception {
-        int numPartitions = 4;
-        String topic = "persistent://my-property/my-ns/my-partitionedtopic1-" + System.currentTimeMillis();
-
-        admin.topics().createPartitionedTopic(topic, numPartitions);
-
-        List<String> expectedPartitions = new ArrayList<>();
-        for (int i =0; i < numPartitions; i++) {
-            expectedPartitions.add(topic + "-partition-" + i);
-        }
-
-        assertEquals(pulsarClient.getPartitionsForTopic(topic).join(), expectedPartitions);
-
-        String nonPartitionedTopic = "persistent://my-property/my-ns/my-non-partitionedtopic1";
-
-        assertEquals(pulsarClient.getPartitionsForTopic(nonPartitionedTopic).join(),
-                Collections.singletonList(nonPartitionedTopic));
-    }
-
-    private class AlwaysTwoMessageRouter implements MessageRouter {
-        @Override
-        public int choosePartition(Message<?> msg, TopicMetadata metadata) {
-            return 2;
-        }
-    }
 }

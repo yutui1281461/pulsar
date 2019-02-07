@@ -18,7 +18,7 @@
  */
 package org.apache.pulsar.common.lookup.data;
 
-import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
 
 public class LookupData {
     private String brokerUrl;
@@ -85,7 +85,7 @@ public class LookupData {
 
     @Override
     public String toString() {
-        return MoreObjects.toStringHelper(this).add("brokerUrl", brokerUrl).add("brokerUrlTls", brokerUrlTls)
+        return Objects.toStringHelper(this).add("brokerUrl", brokerUrl).add("brokerUrlTls", brokerUrlTls)
                 .add("httpUrl", httpUrl).toString();
     }
 }

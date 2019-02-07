@@ -23,12 +23,11 @@ DECLARE_LOG_OBJECT()
 #include <thread>
 #include <iostream>
 #include <fstream>
-#include <mutex>
-#include <functional>
 
 using namespace std::chrono;
 
-#include <boost/date_time/posix_time/posix_time.hpp>
+#include <boost/thread.hpp>
+#include <boost/bind.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/program_options.hpp>
 #include <boost/accumulators/accumulators.hpp>
@@ -69,8 +68,6 @@ struct Arguments {
     int receiverQueueSize;
     int ioThreads;
     int listenerThreads;
-    std::string encKeyName;
-    std::string encKeyValueFile;
 };
 
 namespace pulsar {
@@ -90,37 +87,6 @@ class PulsarFriend {
 #include <atomic>
 #endif
 
-class EncKeyReader: public CryptoKeyReader {
-
-  private:
-    std::string privKeyContents;
-
-    void readFile(std::string fileName, std::string& fileContents) const {
-        std::ifstream ifs(fileName);
-        std::stringstream fileStream;
-        fileStream << ifs.rdbuf();
-        fileContents = fileStream.str();
-    }
-
-  public:
-
-    EncKeyReader(std::string keyFile) {
-        if (keyFile.empty()) {
-            return;
-        }
-        readFile(keyFile, privKeyContents);
-    }
-
-    Result getPublicKey(const std::string &keyName, std::map<std::string, std::string>& metadata, EncryptionKeyInfo& encKeyInfo) const {
-        return ResultInvalidConfiguration;
-    }
-
-    Result getPrivateKey(const std::string &keyName, std::map<std::string, std::string>& metadata, EncryptionKeyInfo& encKeyInfo) const {
-        encKeyInfo.setKey(privKeyContents);
-        return ResultOk;
-    }
-};
-
 // Counters
 std::atomic<uint32_t> messagesReceived;
 std::atomic<uint32_t> bytesReceived;
@@ -131,8 +97,8 @@ void handleAckComplete(Result) {
 }
 
 
-std::mutex mutex;
-typedef std::unique_lock<std::mutex> Lock;
+boost::mutex mutex;
+typedef boost::unique_lock<boost::mutex> Lock;
 typedef accumulator_set<uint64_t, stats<tag::mean, tag::p_square_quantile> > LatencyAccumulator;
 LatencyAccumulator e2eLatencyAccumulator(quantile_probability = 0.99);
 
@@ -183,29 +149,25 @@ void startPerfConsumer(const Arguments& args) {
     ConsumerConfiguration consumerConf;
     consumerConf.setMessageListener(messageListener);
     consumerConf.setReceiverQueueSize(args.receiverQueueSize);
-    std::shared_ptr<EncKeyReader> keyReader = std::make_shared<EncKeyReader>(args.encKeyValueFile);
-    if (!args.encKeyName.empty()) {
-        consumerConf.setCryptoKeyReader(keyReader);
-    }
 
     Latch latch(args.numTopics * args.numConsumers);
 
     for (int i = 0; i < args.numTopics; i++) {
         std::string topic =
                 (args.numTopics == 1) ?
-                        args.topic : args.topic + "-" + std::to_string(i);
+                        args.topic : args.topic + "-" + boost::lexical_cast<std::string>(i);
         LOG_INFO("Adding " << args.numConsumers << " consumers on topic " << topic);
 
         for (int j = 0; j < args.numConsumers; j++) {
             std::string subscriberName;
             if (args.numConsumers > 1) {
-                subscriberName = args.subscriberName + "-" + std::to_string(j);
+                subscriberName = args.subscriberName + "-" + boost::lexical_cast<std::string>(j);
             } else {
                 subscriberName = args.subscriberName;
             }
 
             client.subscribeAsync(topic, subscriberName, consumerConf,
-                                  std::bind(handleSubscribe, std::placeholders::_1, std::placeholders::_2, latch));
+                                  boost::bind(handleSubscribe, _1, _2, latch));
         }
     }
 
@@ -213,7 +175,7 @@ void startPerfConsumer(const Arguments& args) {
 
     latch.wait();
     LOG_INFO(
-            "Start receiving from " << args.numConsumers << " consumers on " << args.numTopics << " topics");
+            "Start receiving from " << args.numConsumers << " consumers on " << args.numTopics << " destinations");
 
     while (true) {
         std::this_thread::sleep_for(seconds(10));
@@ -238,6 +200,8 @@ void startPerfConsumer(const Arguments& args) {
 }
 
 int main(int argc, char** argv) {
+    LogUtils::init("conf/log4cxx.conf");
+
     // First try to read default values from config file if present
     const std::string confFile = "conf/client.conf";
     std::string defaultServiceUrl;
@@ -297,12 +261,7 @@ int main(int argc, char** argv) {
      "Number of IO threads to use")  //
 
     ("listener-threads,l", po::value<int>(&args.listenerThreads)->default_value(1),
-     "Number of listener threads") //
-
-    ("encryption-key-name,k", po::value<std::string>(&args.encKeyName)->default_value(""), "The private key name to decrypt payload") //
-
-    ("encryption-key-value-file,f", po::value<std::string>(&args.encKeyValueFile)->default_value(""),
-            "The file which contains the private key to decrypt payload"); //
+     "Number of listener threads");
 
     po::options_description hidden;
     hidden.add_options()("topic", po::value<std::string>(&args.topic), "Topic name");

@@ -19,41 +19,23 @@
 package org.apache.pulsar.client.impl.auth;
 
 import java.io.IOException;
-import java.security.Security;
 import java.util.Map;
 
 import org.apache.pulsar.client.api.Authentication;
 import org.apache.pulsar.client.api.AuthenticationDataProvider;
-import org.apache.pulsar.client.api.EncodedAuthenticationParameterSupport;
 import org.apache.pulsar.client.api.PulsarClientException;
-import org.apache.pulsar.client.impl.AuthenticationUtil;
 
 /**
- *
+ * 
  * This plugin requires these parameters
- *
+ * 
  * tlsCertFile: A file path for a client certificate. tlsKeyFile: A file path for a client private key.
  *
  */
-public class AuthenticationTls implements Authentication, EncodedAuthenticationParameterSupport {
-
-    private static final long serialVersionUID = 1L;
+public class AuthenticationTls implements Authentication {
 
     private String certFilePath;
     private String keyFilePath;
-
-    // Load Bouncy Castle
-    static {
-        Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-    }
-    
-    public AuthenticationTls() {
-    }
-
-    public AuthenticationTls(String certFilePath, String keyFilePath) {
-        this.certFilePath = certFilePath;
-        this.keyFilePath = keyFilePath;
-    }
 
     @Override
     public void close() throws IOException {
@@ -75,24 +57,14 @@ public class AuthenticationTls implements Authentication, EncodedAuthenticationP
     }
 
     @Override
-    public void configure(String encodedAuthParamString) {
-        setAuthParams(AuthenticationUtil.configureFromPulsar1AuthParamString(encodedAuthParamString));
-    }
-
-    @Override
-    @Deprecated
     public void configure(Map<String, String> authParams) {
-        setAuthParams(authParams);
+        certFilePath = authParams.get("tlsCertFile");
+        keyFilePath = authParams.get("tlsKeyFile");
     }
 
     @Override
     public void start() throws PulsarClientException {
         // noop
-    }
-
-    private void setAuthParams(Map<String, String> authParams) {
-        certFilePath = authParams.get("tlsCertFile");
-        keyFilePath = authParams.get("tlsKeyFile");
     }
 
 }

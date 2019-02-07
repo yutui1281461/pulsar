@@ -34,22 +34,17 @@ struct ClientConfigurationImpl {
     std::string tlsTrustCertsFilePath;
     bool tlsAllowInsecureConnection;
     unsigned int statsIntervalInSeconds;
-    LoggerFactoryPtr loggerFactory;
-    bool validateHostName;
-
-    ClientConfigurationImpl()
-        : authenticationPtr(AuthFactory::Disabled()),
-          ioThreads(1),
-          operationTimeoutSeconds(30),
-          messageListenerThreads(1),
-          concurrentLookupRequest(50000),
-          logConfFilePath(),
-          useTls(false),
-          tlsAllowInsecureConnection(false),
-          statsIntervalInSeconds(600),  // 10 minutes
-          loggerFactory(),
-          validateHostName(false) {}
+    ClientConfigurationImpl() : authenticationPtr(AuthFactory::Disabled()),
+             ioThreads(1),
+             operationTimeoutSeconds(30),
+             messageListenerThreads(1),
+             concurrentLookupRequest(5000),
+             logConfFilePath(),
+             useTls(false),
+             tlsAllowInsecureConnection(true),
+             statsIntervalInSeconds(600) { // 10 minutes
+    }
 };
-}  // namespace pulsar
+}
 
 #endif /* LIB_CLIENTCONFIGURATIONIMPL_H_ */

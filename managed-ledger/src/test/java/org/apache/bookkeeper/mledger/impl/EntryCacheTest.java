@@ -20,20 +20,23 @@ package org.apache.bookkeeper.mledger.impl;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertEquals;
 
-import io.netty.buffer.Unpooled;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Vector;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import org.apache.bookkeeper.client.BKException.BKNoSuchLedgerExistsException;
-import org.apache.bookkeeper.client.api.BKException;
-import org.apache.bookkeeper.client.api.LedgerEntries;
-import org.apache.bookkeeper.client.api.LedgerEntry;
-import org.apache.bookkeeper.client.api.ReadHandle;
+
+import org.apache.bookkeeper.client.AsyncCallback.ReadCallback;
+import org.apache.bookkeeper.client.BKException;
+import org.apache.bookkeeper.client.LedgerEntry;
+import org.apache.bookkeeper.client.LedgerHandle;
 import org.apache.bookkeeper.mledger.AsyncCallbacks.ReadEntriesCallback;
 import org.apache.bookkeeper.mledger.Entry;
 import org.apache.bookkeeper.mledger.ManagedLedgerException;
@@ -44,6 +47,8 @@ import org.mockito.stubbing.Answer;
 import org.testng.Assert;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
+
+import io.netty.buffer.Unpooled;
 
 @Test
 public class EntryCacheTest extends MockedBookKeeperTestCase {
@@ -61,7 +66,7 @@ public class EntryCacheTest extends MockedBookKeeperTestCase {
 
     @Test(timeOut = 5000)
     void testRead() throws Exception {
-        ReadHandle lh = getLedgerHandle();
+        LedgerHandle lh = getLedgerHandle();
         when(lh.getId()).thenReturn((long) 0);
 
         EntryCacheManager cacheManager = factory.getEntryCacheManager();
@@ -88,12 +93,12 @@ public class EntryCacheTest extends MockedBookKeeperTestCase {
         counter.await();
 
         // Verify no entries were read from bookkeeper
-        verify(lh, never()).readAsync(anyLong(), anyLong());
+        verify(lh, never()).asyncReadEntries(anyLong(), anyLong(), any(ReadCallback.class), any());
     }
 
     @Test(timeOut = 5000)
     void testReadMissingBefore() throws Exception {
-        ReadHandle lh = getLedgerHandle();
+        LedgerHandle lh = getLedgerHandle();
         when(lh.getId()).thenReturn((long) 0);
 
         EntryCacheManager cacheManager = factory.getEntryCacheManager();
@@ -121,7 +126,7 @@ public class EntryCacheTest extends MockedBookKeeperTestCase {
 
     @Test(timeOut = 5000)
     void testReadMissingAfter() throws Exception {
-        ReadHandle lh = getLedgerHandle();
+        LedgerHandle lh = getLedgerHandle();
         when(lh.getId()).thenReturn((long) 0);
 
         EntryCacheManager cacheManager = factory.getEntryCacheManager();
@@ -149,7 +154,7 @@ public class EntryCacheTest extends MockedBookKeeperTestCase {
 
     @Test(timeOut = 5000)
     void testReadMissingMiddle() throws Exception {
-        ReadHandle lh = getLedgerHandle();
+        LedgerHandle lh = getLedgerHandle();
         when(lh.getId()).thenReturn((long) 0);
 
         EntryCacheManager cacheManager = factory.getEntryCacheManager();
@@ -178,7 +183,7 @@ public class EntryCacheTest extends MockedBookKeeperTestCase {
 
     @Test(timeOut = 5000)
     void testReadMissingMultiple() throws Exception {
-        ReadHandle lh = getLedgerHandle();
+        LedgerHandle lh = getLedgerHandle();
         when(lh.getId()).thenReturn((long) 0);
 
         EntryCacheManager cacheManager = factory.getEntryCacheManager();
@@ -207,14 +212,18 @@ public class EntryCacheTest extends MockedBookKeeperTestCase {
 
     @Test(timeOut = 5000)
     void testReadWithError() throws Exception {
-        final ReadHandle lh = getLedgerHandle();
+        final LedgerHandle lh = getLedgerHandle();
         when(lh.getId()).thenReturn((long) 0);
 
-        doAnswer((invocation) -> {
-                CompletableFuture<LedgerEntries> future = new CompletableFuture<>();
-                future.completeExceptionally(new BKNoSuchLedgerExistsException());
-                return future;
-            }).when(lh).readAsync(anyLong(), anyLong());
+        doAnswer(new Answer<Object>() {
+            public Object answer(InvocationOnMock invocation) {
+                Object[] args = invocation.getArguments();
+                ReadCallback callback = (ReadCallback) args[2];
+                Object ctx = args[3];
+                callback.readComplete(BKException.Code.NoSuchLedgerExistsException, lh, null, ctx);
+                return null;
+            }
+        }).when(lh).asyncReadEntries(anyLong(), anyLong(), any(ReadCallback.class), any());
 
         EntryCacheManager cacheManager = factory.getEntryCacheManager();
         EntryCache entryCache = cacheManager.getEntryCache(ml);
@@ -236,25 +245,29 @@ public class EntryCacheTest extends MockedBookKeeperTestCase {
         counter.await();
     }
 
-    private static ReadHandle getLedgerHandle() {
-        final ReadHandle lh = mock(ReadHandle.class);
+    private static LedgerHandle getLedgerHandle() {
+        final LedgerHandle lh = mock(LedgerHandle.class);
         final LedgerEntry ledgerEntry = mock(LedgerEntry.class, Mockito.CALLS_REAL_METHODS);
+        doReturn(new byte[10]).when(ledgerEntry).getEntry();
         doReturn(Unpooled.wrappedBuffer(new byte[10])).when(ledgerEntry).getEntryBuffer();
         doReturn((long) 10).when(ledgerEntry).getLength();
 
-        doAnswer((invocation) -> {
+        doAnswer(new Answer<Object>() {
+            public Object answer(InvocationOnMock invocation) {
                 Object[] args = invocation.getArguments();
                 long firstEntry = (Long) args[0];
                 long lastEntry = (Long) args[1];
+                ReadCallback callback = (ReadCallback) args[2];
+                Object ctx = args[3];
 
                 Vector<LedgerEntry> entries = new Vector<LedgerEntry>();
                 for (int i = 0; i <= (lastEntry - firstEntry); i++) {
                     entries.add(ledgerEntry);
                 }
-                LedgerEntries ledgerEntries = mock(LedgerEntries.class);
-                doAnswer((invocation2) -> entries.iterator()).when(ledgerEntries).iterator();
-                return CompletableFuture.completedFuture(ledgerEntries);
-            }).when(lh).readAsync(anyLong(), anyLong());
+                callback.readComplete(0, lh, entries.elements(), ctx);
+                return null;
+            }
+        }).when(lh).asyncReadEntries(anyLong(), anyLong(), any(ReadCallback.class), any());
 
         return lh;
     }

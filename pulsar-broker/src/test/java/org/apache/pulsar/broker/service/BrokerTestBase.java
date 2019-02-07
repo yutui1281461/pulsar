@@ -21,10 +21,11 @@ package org.apache.pulsar.broker.service;
 import org.apache.pulsar.broker.PulsarService;
 import org.apache.pulsar.broker.auth.MockedPulsarServiceBaseTest;
 import org.apache.pulsar.common.policies.data.ClusterData;
-import org.apache.pulsar.common.policies.data.TenantInfo;
+import org.apache.pulsar.common.policies.data.PropertyAdmin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
 /**
@@ -38,11 +39,10 @@ public abstract class BrokerTestBase extends MockedPulsarServiceBaseTest {
 
     public void baseSetup() throws Exception {
         super.internalSetup();
-        admin.clusters().createCluster("test", new ClusterData(brokerUrl.toString()));
-        admin.tenants().createTenant("prop",
-                new TenantInfo(Sets.newHashSet("appid1"), Sets.newHashSet("test")));
-        admin.namespaces().createNamespace("prop/ns-abc");
-        admin.namespaces().setNamespaceReplicationClusters("prop/ns-abc", Sets.newHashSet("test"));
+        admin.clusters().createCluster("use", new ClusterData(brokerUrl.toString()));
+        admin.properties().createProperty("prop",
+                new PropertyAdmin(Lists.newArrayList("appid1"), Sets.newHashSet("use")));
+        admin.namespaces().createNamespace("prop/use/ns-abc");
     }
 
     void rolloverPerIntervalStats() {

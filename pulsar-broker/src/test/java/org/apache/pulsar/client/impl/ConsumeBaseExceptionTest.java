@@ -19,6 +19,8 @@
 package org.apache.pulsar.client.impl;
 
 import org.apache.pulsar.client.api.Consumer;
+import org.apache.pulsar.client.api.ConsumerConfiguration;
+import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.ProducerConsumerBase;
 import org.apache.pulsar.client.api.PulsarClientException;
 import org.testng.Assert;
@@ -43,8 +45,8 @@ public class ConsumeBaseExceptionTest extends ProducerConsumerBase {
 
     @Test
     public void testClosedConsumer() throws PulsarClientException {
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic("persistent://my-property/my-ns/topicName")
-                .subscriptionName("my-subscription").subscribe();
+        Consumer consumer = null;
+        consumer = pulsarClient.subscribe("persistent://prop/cluster/ns/topicName", "my-subscription");
         consumer.close();
         Assert.assertTrue(consumer.receiveAsync().isCompletedExceptionally());
 
@@ -60,11 +62,11 @@ public class ConsumeBaseExceptionTest extends ProducerConsumerBase {
 
     @Test
     public void testListener() throws PulsarClientException {
-
-        Consumer<byte[]> consumer = pulsarClient.newConsumer().topic("persistent://my-property/my-ns/topicName")
-                .subscriptionName("my-subscription").messageListener((consumer1, msg) -> {
-
-                }).subscribe();
+        Consumer consumer = null;
+        ConsumerConfiguration conf = new ConsumerConfiguration();
+        conf.setMessageListener((Consumer c, Message msg) -> {
+        });
+        consumer = pulsarClient.subscribe("persistent://prop/cluster/ns/topicName", "my-subscription", conf);
         Assert.assertTrue(consumer.receiveAsync().isCompletedExceptionally());
 
         try {

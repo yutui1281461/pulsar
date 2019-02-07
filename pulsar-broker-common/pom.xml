@@ -26,7 +26,7 @@
   <parent>
     <groupId>org.apache.pulsar</groupId>
     <artifactId>pulsar</artifactId>
-    <version>2.3.0-SNAPSHOT</version>
+    <version>1.19-incubating-SNAPSHOT</version>
   </parent>
 
   <artifactId>pulsar-broker-common</artifactId>
@@ -35,13 +35,13 @@
   <dependencies>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>pulsar-zookeeper-utils</artifactId>
+      <artifactId>pulsar-client</artifactId>
       <version>${project.version}</version>
     </dependency>
     
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>pulsar-common</artifactId>
+      <artifactId>pulsar-zookeeper-utils</artifactId>
       <version>${project.version}</version>
     </dependency>
 
@@ -53,21 +53,6 @@
     <dependency>
       <groupId>javax.servlet</groupId>
       <artifactId>javax.servlet-api</artifactId>
-    </dependency>
-    
-    <dependency>
-      <groupId>javax.ws.rs</groupId>
-      <artifactId>javax.ws.rs-api</artifactId>
-    </dependency>
-    
-    <dependency>
-      <groupId>io.jsonwebtoken</groupId>
-      <artifactId>jjwt-impl</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>io.jsonwebtoken</groupId>
-      <artifactId>jjwt-jackson</artifactId>
     </dependency>
   </dependencies>
 </project>

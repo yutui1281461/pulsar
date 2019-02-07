@@ -21,21 +21,17 @@
 
 #include "CompressionCodec.h"
 #include <zlib.h>
-
-// Make symbol visible to unit tests
-#pragma GCC visibility push(default)
+#include <boost/thread/mutex.hpp>
 
 namespace pulsar {
 
 class CompressionCodecZLib : public CompressionCodec {
-   public:
+ public:
     SharedBuffer encode(const SharedBuffer& raw);
 
     bool decode(const SharedBuffer& encoded, uint32_t uncompressedSize, SharedBuffer& decoded);
 };
 
-}  // namespace pulsar
-
-#pragma GCC visibility pop
+}
 
 #endif /* LIB_COMPRESSIONCODECZLIB_H_ */
