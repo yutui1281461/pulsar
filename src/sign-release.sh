@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
@@ -17,4 +18,16 @@
 # under the License.
 #
 
-description: A wrapper around the [`pulsar`](#pulsar) tool to start the process in the background with [nohup](https://en.wikipedia.org/wiki/Nohup). `pulsar-daemon` has the same command interface as `pulsar`.
+FILES=$*
+
+for FILE in $FILES
+do
+   echo "Signing $FILE"
+   gpg --armor --output $FILE.asc --detach-sig $FILE
+
+   # Checksum
+   gpg --print-md MD5 $FILE > $FILE.md5
+
+   # SHA-512 signature
+   gpg --print-md SHA512 $FILE > $FILE.sha
+done
