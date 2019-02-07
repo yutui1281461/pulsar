@@ -62,31 +62,25 @@ groups:
   - title: Modular load manager
     endpoint: ModularLoadManager
     
-- title: Pulsar applications
-  dir: applications
+- title: Client libraries
+  dir: clients
   docs:
-  - title: The Pulsar Java client
-    endpoint: JavaClient
-  - title: The Pulsar C++ client
-    endpoint: CppClient
-  - title: The Pulsar Python client
-    endpoint: PythonClient
+  - title: Java client
+    endpoint: Java
+  - title: C++ client
+    endpoint: Cpp
+  - title: Python client
+    endpoint: Python
   - title: WebSocket API
     endpoint: WebSocket
-  - title: Spark Streaming receiver
-    endpoint: PulsarSpark
-  - title: Apache Storm adaptor
-    endpoint: PulsarStorm
-  - title: Simulation tools
-    endpoint: SimulationTools
 
-- title: Developing Pulsar
-  dir: project
+- title: Adaptors
+  dir: adaptors
   docs:
-  - title: Pulsar binary protocol
-    endpoint: BinaryProtocol
-  - title: Codebase
-    endpoint: Codebase
+  - title: Spark Streaming
+    endpoint: PulsarSpark
+  - title: Apache Storm
+    endpoint: PulsarStorm
 
 - title: Advanced
   dir: advanced
@@ -95,6 +89,16 @@ groups:
     endpoint: PartitionedTopics
   - title: Retention and expiry
     endpoint: RetentionExpiry
+
+- title: Developing Pulsar
+  dir: project
+  docs:
+  - title: Simulation tools
+    endpoint: SimulationTools
+  - title: Pulsar binary protocol
+    endpoint: BinaryProtocol
+  - title: Codebase
+    endpoint: Codebase
 
 - title: Reference
   dir: reference
