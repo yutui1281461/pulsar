@@ -84,7 +84,7 @@ public class PersistentQueueE2ETest extends BrokerTestBase {
         Consumer consumer2 = pulsarClient.subscribe(topicName, subName, conf);
 
         PersistentTopic topicRef = (PersistentTopic) pulsar.getBrokerService().getTopicReference(topicName);
-        PersistentSubscription subRef = topicRef.getSubscription(subName);
+        PersistentSubscription subRef = topicRef.getPersistentSubscription(subName);
 
         assertNotNull(topicRef);
         assertNotNull(subRef);
@@ -156,7 +156,7 @@ public class PersistentQueueE2ETest extends BrokerTestBase {
         }
 
         Thread.sleep(ASYNC_EVENT_COMPLETION_WAIT);
-        subRef = topicRef.getSubscription(subName);
+        subRef = topicRef.getPersistentSubscription(subName);
         assertNull(subRef);
 
         producer.close();
