@@ -17,5 +17,17 @@
 # under the License.
 #
 
-add_library(ztsClient STATIC ZTSClient.cc)
-target_link_libraries(ztsClient ${CLIENT_LIBS})
+FROM ubuntu:16.04
+
+RUN apt-get update
+RUN apt-get install -y maven tig g++ cmake libssl-dev libcurl4-openssl-dev \
+                liblog4cxx-dev libprotobuf-dev libboost-all-dev  libgtest-dev \
+                libjsoncpp-dev libxml2-utils protobuf-compiler valgrind
+
+# Compile and install gtest
+RUN cd /usr/src/gtest && cmake . && make && cp libgtest.a /usr/lib
+
+# Include gtest parallel to speed up unit tests
+RUN git clone https://github.com/google/gtest-parallel.git
+
+ENV JAVA_HOME=/usr/lib/jvm/java-1.8.0-openjdk-amd64
