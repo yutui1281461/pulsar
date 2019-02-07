@@ -18,7 +18,7 @@
  */
 package org.apache.pulsar.stats.client;
 
-import static junit.framework.Assert.assertTrue;
+import static org.testng.Assert.assertTrue;
 import static org.mockito.Mockito.spy;
 
 import java.net.URL;
