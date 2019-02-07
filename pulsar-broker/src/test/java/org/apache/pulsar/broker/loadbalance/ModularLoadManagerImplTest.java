@@ -105,10 +105,6 @@ public class ModularLoadManagerImplTest {
     private final int SECONDARY_BROKER_PORT = PortManager.nextFreePort();
     private static final Logger log = LoggerFactory.getLogger(ModularLoadManagerImplTest.class);
 
-    static {
-        System.setProperty("test.basePort", "16100");
-    }
-
     // Invoke non-overloaded method.
     private Object invokeSimpleMethod(final Object instance, final String methodName, final Object... args)
             throws Exception {
@@ -383,7 +379,7 @@ public class ModularLoadManagerImplTest {
         currentData.getCpu().usage = 106;
         currentData.getCpu().limit = 1000;
         assert (!needUpdate.get());
-        
+
         // Minimally test other absolute values to ensure they are included.
         lastData.getCpu().usage = 100;
         lastData.getCpu().limit = 1000;
